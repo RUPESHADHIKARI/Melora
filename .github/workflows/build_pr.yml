@@ -10,7 +10,7 @@ on:
     # changes still build.
     paths-ignore:
       - "app/src/main/res/values-*/strings.xml"
-      - "app/src/main/res/values-*/metrolist_strings.xml"
+      - "app/src/main/res/values-*/MELORA_strings.xml"
       - "fastlane/**"
 
 concurrency:
@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   build:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 20
 
     steps:
@@ -58,7 +58,7 @@ jobs:
             -keyalg RSA \
             -keysize 2048 \
             -validity 10000 \
-            -dname "CN=Metrolist PR ${{ github.event.number }},O=Metrolist,C=US"
+            -dname "CN=Melora PR ${{ github.event.number }},O=Metrolist,C=US"
 
       - name: Save PR debug keystore
         if: steps.pr_keystore.outputs.cache-hit != 'true'
@@ -71,9 +71,9 @@ jobs:
         run: ./gradlew --console=plain assembleGmsDebug --warning-mode summary
         env:
           GITHUB_EVENT_NAME: ${{ github.event_name }}
-          METROLIST_APPLICATION_ID: com.metrolist.music.pr.p${{ github.event.number }}
-          METROLIST_APP_NAME: Metrolist PR ${{ github.event.number }}
-          METROLIST_DEBUG_KEYSTORE_PATH: pr-debug.keystore
+          MELORA_APPLICATION_ID: com.melora.app.pr.p${{ github.event.number }}
+          MELORA_APP_NAME: Melora PR ${{ github.event.number }}
+          MELORA_DEBUG_KEYSTORE_PATH: pr-debug.keystore
           PULL_REQUEST: "true"
           LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
           LASTFM_SECRET: ${{ secrets.LASTFM_SECRET }}

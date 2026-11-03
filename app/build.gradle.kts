@@ -7,19 +7,19 @@ if (localPropertiesFile.exists()) {
     localProperties.load(localPropertiesFile.inputStream())
 }
 
-val baseApplicationId = "com.metrolist.music"
-val applicationIdOverride = System.getenv("METROLIST_APPLICATION_ID")?.takeIf { it.isNotBlank() }
-val appNameOverride = System.getenv("METROLIST_APP_NAME")?.takeIf { it.isNotBlank() }
+val baseApplicationId = "com.melora.app"
+val applicationIdOverride = System.getenv("MELORA_APPLICATION_ID")?.takeIf { it.isNotBlank() }
+val appNameOverride = System.getenv("MELORA_APP_NAME")?.takeIf { it.isNotBlank() }
 val buildCommit =
-    System.getenv("METROLIST_BUILD_COMMIT")
+    System.getenv("MELORA_BUILD_COMMIT")
         ?.trim()
         ?.takeIf { it.matches(Regex("[0-9a-fA-F]{7,40}")) }
         ?.take(7)
         ?.lowercase()
-val debugKeystorePathOverride = System.getenv("METROLIST_DEBUG_KEYSTORE_PATH")?.takeIf { it.isNotBlank() }
-val debugKeystorePassword = System.getenv("METROLIST_DEBUG_KEYSTORE_PASSWORD")?.takeIf { it.isNotBlank() } ?: "android"
-val debugKeyAlias = System.getenv("METROLIST_DEBUG_KEY_ALIAS")?.takeIf { it.isNotBlank() } ?: "androiddebugkey"
-val debugKeyPassword = System.getenv("METROLIST_DEBUG_KEY_PASSWORD")?.takeIf { it.isNotBlank() } ?: "android"
+val debugKeystorePathOverride = System.getenv("MELORA_DEBUG_KEYSTORE_PATH")?.takeIf { it.isNotBlank() }
+val debugKeystorePassword = System.getenv("MELORA_DEBUG_KEYSTORE_PASSWORD")?.takeIf { it.isNotBlank() } ?: "android"
+val debugKeyAlias = System.getenv("MELORA_DEBUG_KEY_ALIAS")?.takeIf { it.isNotBlank() } ?: "androiddebugkey"
+val debugKeyPassword = System.getenv("MELORA_DEBUG_KEY_PASSWORD")?.takeIf { it.isNotBlank() } ?: "android"
 val persistentDebugKeystoreFile = file("persistent-debug.keystore")
 val workflowDebugKeystoreFile = debugKeystorePathOverride?.let(::file)
 
@@ -45,7 +45,7 @@ android {
         val baseVersionName = requireNotNull(versionName)
         buildConfigField("String", "BASE_VERSION_NAME", "\"$baseVersionName\"")
         buildCommit?.let { versionName = "$baseVersionName+$it" }
-        resValue("string", "app_name", appNameOverride ?: "Metrolist")
+        resValue("string", "app_name", appNameOverride ?: "Melora")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -66,19 +66,19 @@ android {
 
     flavorDimensions += listOf("variant")
     productFlavors {
-        // FOSS - Updater, but no gcast
+        // FOSS - no gcast; in-app updater disabled for MELORA (no release channel yet)
         create("foss") {
             dimension = "variant"
             isDefault = true
             buildConfigField("Boolean", "CAST_AVAILABLE", "false")
-            buildConfigField("Boolean", "UPDATER_AVAILABLE", "true")
+            buildConfigField("Boolean", "UPDATER_AVAILABLE", "false")
         }
 
-        // GMS - Updater and gcast
+        // GMS - no gcast distinction needed for MELORA; cast remains
         create("gms") {
             dimension = "variant"
             buildConfigField("Boolean", "CAST_AVAILABLE", "true")
-            buildConfigField("Boolean", "UPDATER_AVAILABLE", "true")
+            buildConfigField("Boolean", "UPDATER_AVAILABLE", "false")
         }
 
         // IzzyOnDroid - no gcast, no updater - the ONLY F-droid compliant build
@@ -133,7 +133,7 @@ android {
             }
             isDebuggable = true
             if (appNameOverride == null) {
-                resValue("string", "app_name", "Metrolist Debug")
+                resValue("string", "app_name", "Melora Debug")
             }
             signingConfig =
                 if (workflowDebugKeystoreFile != null) {
@@ -255,6 +255,7 @@ dependencies {
     implementation(libs.coroutines.guava)
 
     implementation(libs.activity)
+    implementation(libs.core.splashscreen)
     implementation(libs.hilt.navigation)
     implementation(libs.datastore)
 

@@ -1,9 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Widget Theme for Android 12+ with Dynamic Colors -->
-    <style name="Theme.Widget.Metrolist" parent="@android:style/Theme.DeviceDefault.DayNight" />
+    <style name="Theme.Widget.Melora" parent="@android:style/Theme.DeviceDefault.DayNight" />
 
-    <style name="Theme.Metrolist.Transparent" parent="@android:style/Theme.Translucent.NoTitleBar">
+    <!-- Splash screen for Android 12+ (system splash attributes) -->
+    <style name="Theme.Melora.Splash" parent="Theme.SplashScreen">
+        <item name="android:windowSplashScreenBackground">#000000</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_native_icon</item>
+        <item name="android:windowSplashScreenAnimationDuration">400</item>
+        <item name="postSplashScreenTheme">@style/Theme.Melora</item>
+    </style>
+
+    <style name="Theme.Melora.Transparent" parent="@android:style/Theme.Translucent.NoTitleBar">
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:windowIsTranslucent">true</item>
         <item name="android:windowNoTitle">true</item>

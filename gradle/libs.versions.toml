@@ -9,6 +9,7 @@ compose = "1.12.1"
 lifecycle = "2.11.0"
 material3 = "1.5.0-alpha28"
 appcompat = "1.8.0"
+coreSplashscreen = "1.0.1"
 media3 = "1.10.1" # 1.11.1 hides Android 17 media controls (#4404)
 mediarouter = "1.8.1"
 castFramework = "22.3.1"
@@ -59,6 +60,7 @@ material3 = { module = "androidx.compose.material3:material3", version.ref = "ma
 materialKolor = { module = "com.materialkolor:material-kolor", version.ref = "materialKolor" }
 
 appcompat = { module = "androidx.appcompat:appcompat", version.ref = "appcompat" }
+core-splashscreen = { module = "androidx.core:core-splashscreen", version.ref = "coreSplashscreen" }
 browser = { module = "androidx.browser:browser", version.ref = "browser" }
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 androidx-test-core = { module = "androidx.test:core", version.ref = "androidxTestCore" }

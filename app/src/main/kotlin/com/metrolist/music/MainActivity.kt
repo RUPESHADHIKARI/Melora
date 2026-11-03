@@ -20,6 +20,7 @@ import android.view.View
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.fragment.app.FragmentActivity
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.activity.compose.setContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
@@ -79,6 +80,7 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -197,7 +199,8 @@ import com.metrolist.music.ui.screens.settings.DarkMode
 import com.metrolist.music.ui.screens.settings.NavigationTab
 import com.metrolist.music.ui.theme.ColorSaver
 import com.metrolist.music.ui.theme.DefaultThemeColor
-import com.metrolist.music.ui.theme.MetrolistTheme
+import com.metrolist.music.ui.splash.MeloraSplashOverlay
+import com.metrolist.music.ui.theme.MeloraTheme
 import com.metrolist.music.ui.theme.extractThemeColor
 import com.metrolist.music.ui.utils.appBarScrollBehavior
 import com.metrolist.music.ui.utils.resetHeightOffset
@@ -264,6 +267,9 @@ class MainActivity : FragmentActivity() {
     private lateinit var navController: NavHostController
     private var pendingIntent: Intent? = null
     private var latestVersionName by mutableStateOf(BuildConfig.BASE_VERSION_NAME)
+
+    // Splash hand-off flag; sampled by the system-splash keep-on-screen condition
+    private var isComposeReady = false
 
     // Keep PlayerConnection as regular property - NOT mutableStateOf to prevent UI recomposition
     // when it becomes null during onStop. Only update the snapshot for Compose when needed.
@@ -392,7 +398,15 @@ class MainActivity : FragmentActivity() {
     @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Native splash: system icon on black on 12+, compat implementation below;
+        // must run before super.onCreate per androidx.core:core-splashscreen contract.
+        val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
+
+        // Hold the system splash (emblem on black) until Compose's first real frame
+        // so there is no black gap between the native splash and the welcome overlay.
+        splashScreen.setKeepOnScreenCondition { !isComposeReady }
+
         window.decorView.layoutDirection = View.LAYOUT_DIRECTION_LTR
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
@@ -468,14 +482,20 @@ class MainActivity : FragmentActivity() {
             }
         }
 
+        // Skip the branded welcome on non-launcher entry points (deep links, shares,
+        // widget/recognizer actions) so users never wait for an animation to reach content.
+        val skipSplash = intent?.action != null && intent.action != Intent.ACTION_MAIN
+
         setContent {
-            MetrolistApp(
+            MeloraApp(
                 latestVersionName = latestVersionName,
                 onLatestVersionNameChange = { latestVersionName = it },
                 playerConnection = playerConnectionSnapshot,
                 database = database,
                 downloadUtil = downloadUtil,
                 syncUtils = syncUtils,
+                skipSplash = skipSplash,
+                onComposeReady = { isComposeReady = true },
             )
         }
     }
@@ -483,13 +503,15 @@ class MainActivity : FragmentActivity() {
     @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
-    private fun MetrolistApp(
+    private fun MeloraApp(
         latestVersionName: String,
         onLatestVersionNameChange: (String) -> Unit,
         playerConnection: PlayerConnection?,
         database: MusicDatabase,
         downloadUtil: DownloadUtil,
         syncUtils: SyncUtils,
+        skipSplash: Boolean,
+        onComposeReady: () -> Unit,
     ) {
         val checkForUpdates by rememberPreference(CheckForUpdatesKey, defaultValue = true)
         var availableUpdate by remember { mutableStateOf<AvailableUpdate?>(null) }
@@ -566,7 +588,7 @@ class MainActivity : FragmentActivity() {
             }
         }
 
-        val enableDynamicTheme by rememberPreference(DynamicThemeKey, defaultValue = true)
+        val enableDynamicTheme by rememberPreference(DynamicThemeKey, defaultValue = false)
         val enableHighRefreshRate by rememberPreference(EnableHighRefreshRateKey, defaultValue = true)
 
         LaunchedEffect(enableHighRefreshRate) {
@@ -679,7 +701,7 @@ class MainActivity : FragmentActivity() {
                 }
         }
 
-        MetrolistTheme(
+        MeloraTheme(
             darkTheme = useDarkTheme,
             pureBlack = pureBlack,
             themeColor = themeColor,
@@ -716,6 +738,14 @@ class MainActivity : FragmentActivity() {
                         .fillMaxSize()
                         .background(if (pureBlack) Color.Black else MaterialTheme.colorScheme.surface),
             ) {
+                // Melora branded welcome overlay; the app is fully composed and
+                // initializing underneath, so dismissing it never delays usability.
+                var showSplash by remember { mutableStateOf(!skipSplash) }
+                SideEffect { onComposeReady() }
+                if (showSplash) {
+                    MeloraSplashOverlay(onFinished = { showSplash = false })
+                }
+
                 val density = LocalDensity.current
                 val configuration = LocalWindowInfo.current
                 val cutoutInsets = WindowInsets.displayCutout

@@ -1,3 +1,4 @@
+
 @file:Suppress("UnstableApiUsage")
 
 val useMavenLocalInnerTubeX = providers.gradleProperty("useMavenLocalInnerTubeX").isPresent
@@ -37,6 +38,6 @@ dependencyResolutionManagement {
 }
 
 // F-Droid doesn't support foojay-resolver plugin
-rootProject.name = "Metrolist"
+rootProject.name = "Melora"
 include(":app")
 include(":innertube")
