@@ -45,7 +45,7 @@ android {
         val baseVersionName = requireNotNull(versionName)
         buildConfigField("String", "BASE_VERSION_NAME", "\"$baseVersionName\"")
         buildCommit?.let { versionName = "$baseVersionName+$it" }
-        resValue("string", "app_name", appNameOverride ?: "Melora")
+        resValue("string", "app_name", appNameOverride ?: "Melora - by Rupesh")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -122,6 +122,15 @@ android {
             isShrinkResources = true
             isCrunchPngs = false
             isDebuggable = false
+            // Local/CI release builds sign with the stable development key so
+            // they are installable without CI signing secrets. Signed release
+            // APKs and debug APKs then share one signature.
+            signingConfig =
+                if (persistentDebugKeystoreFile.exists()) {
+                    signingConfigs.getByName("persistentDebug")
+                } else {
+                    signingConfigs.getByName("debug")
+                }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
@@ -133,7 +142,7 @@ android {
             }
             isDebuggable = true
             if (appNameOverride == null) {
-                resValue("string", "app_name", "Melora Debug")
+                resValue("string", "app_name", "Melora - by Rupesh")
             }
             signingConfig =
                 if (workflowDebugKeystoreFile != null) {

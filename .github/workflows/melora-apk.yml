@@ -64,7 +64,7 @@ jobs:
         run: ./gradlew --console=plain :app:assembleFossDebug --warning-mode summary
         env:
           MELORA_APPLICATION_ID: com.melora.app
-          MELORA_APP_NAME: Melora
+          MELORA_APP_NAME: Melora - by Rupesh
           MELORA_BUILD_COMMIT: ${{ github.sha }}
 
       - name: Upload APK artifact
