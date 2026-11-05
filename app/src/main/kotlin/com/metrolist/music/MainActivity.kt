@@ -186,6 +186,7 @@ import com.metrolist.music.ui.component.AppNavigationBar
 import com.metrolist.music.ui.component.AppNavigationRail
 import com.metrolist.music.ui.component.BottomSheetMenu
 import com.metrolist.music.ui.component.BottomSheetPage
+import com.metrolist.music.ui.component.HomeTopBar
 import com.metrolist.music.ui.component.LocalBottomSheetPageState
 import com.metrolist.music.ui.component.LocalMenuState
 import com.metrolist.music.ui.component.rememberBottomSheetState
@@ -199,6 +200,7 @@ import com.metrolist.music.ui.screens.settings.DarkMode
 import com.metrolist.music.ui.screens.settings.NavigationTab
 import com.metrolist.music.ui.theme.ColorSaver
 import com.metrolist.music.ui.theme.DefaultThemeColor
+import com.metrolist.music.ui.theme.DefaultSeedColor
 import com.metrolist.music.ui.splash.MeloraSplashOverlay
 import com.metrolist.music.ui.theme.MeloraTheme
 import com.metrolist.music.ui.theme.extractThemeColor
@@ -638,7 +640,7 @@ class MainActivity : FragmentActivity() {
                 pureBlackEnabled && useDarkTheme
             }
 
-        val (selectedThemeColorInt) = rememberPreference(SelectedThemeColorKey, defaultValue = DefaultThemeColor.toArgb())
+        val (selectedThemeColorInt) = rememberPreference(SelectedThemeColorKey, defaultValue = DefaultSeedColor.toArgb())
         val selectedThemeColor = Color(selectedThemeColorInt)
 
         val showChangelog = rememberSaveable { mutableStateOf(false) }
@@ -765,6 +767,7 @@ class MainActivity : FragmentActivity() {
 
                 val homeViewModel: HomeViewModel = hiltViewModel()
                 val accountImageUrl by homeViewModel.accountImageUrl.collectAsStateWithLifecycle()
+                val accountName by homeViewModel.accountName.collectAsStateWithLifecycle()
                 val navBackStackEntry by navController.currentBackStackEntryAsState()
                 val (previousTab, setPreviousTab) = rememberSaveable { mutableStateOf("home") }
 
@@ -1083,13 +1086,36 @@ class MainActivity : FragmentActivity() {
                     Scaffold(
                         snackbarHost = { SnackbarHost(snackbarHostState) },
                         topBar = {
+                            val isHomeRoute = navBackStackEntry?.destination?.route == Screens.Home.route
                             AnimatedVisibility(
                                 visible = shouldShowTopBar,
                                 enter = fadeIn(animationSpec = tween(durationMillis = 300)),
                                 exit = fadeOut(animationSpec = tween(durationMillis = 200)),
                             ) {
                                 Row {
-                                    TopAppBar(
+                                    if (isHomeRoute) {
+                                        // Spotify-inspired home header: logo + greeting
+                                        // + search/notification access, same height as TopAppBar
+                                        HomeTopBar(
+                                            accountName = accountName.takeIf { it != "Guest" },
+                                            accountAvatarUrl = accountImageUrl,
+                                            showUpdateBadge = latestVersionName != BuildConfig.BASE_VERSION_NAME,
+                                            showListenTogether = listenTogetherInTopBar,
+                                            containerColor =
+                                                if (pureBlack) Color.Black else MaterialTheme.colorScheme.surfaceContainer,
+                                            onSearchClick = {
+                                                navController.navigate(Screens.Search.route) {
+                                                    popUpTo(navController.graph.startDestinationId) { saveState = true }
+                                                    launchSingleTop = true
+                                                    restoreState = true
+                                                }
+                                            },
+                                            onNotificationClick = { showChangelog.value = true },
+                                            onListenTogetherClick = { navController.navigate("listen_together_from_topbar") },
+                                            onAccountClick = { showAccountDialog = true },
+                                        )
+                                    } else {
+                                        TopAppBar(
                                         title = {
                                             Text(
                                                 text = currentTitleRes?.let { stringResource(it) } ?: "",
@@ -1163,6 +1189,7 @@ class MainActivity : FragmentActivity() {
                                                 },
                                             ),
                                     )
+                                    }
                                 }
                             }
                         },

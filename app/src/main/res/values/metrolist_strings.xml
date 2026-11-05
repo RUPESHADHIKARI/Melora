@@ -847,6 +847,23 @@
     <string name="daily_discover_for_fans_of">For fans of %1$s</string>
     <string name="from_the_community">From the community</string>
 
+    <!-- Home (Spotify-style redesign) -->
+    <string name="good_morning">Good morning</string>
+    <string name="good_afternoon">Good afternoon</string>
+    <string name="good_evening">Good evening</string>
+    <string name="recently_played">Recently played</string>
+    <string name="recently_added">Recently added</string>
+    <string name="empty_home">Nothing here yet. Check your connection or pull down to refresh</string>
+    <string name="home_filter_all">All</string>
+    <string name="home_filter_music">Music</string>
+    <string name="home_filter_playlists">Playlists</string>
+    <string name="home_filter_albums">Albums</string>
+    <string name="made_for_you">Made for you</string>
+    <string name="recommended_albums">Recommended albums</string>
+    <string name="popular_artists">Popular artists</string>
+    <string name="home_playlists_title">Playlists</string>
+    <string name="palette_melora">Melora</string>
+
     <!-- Logout dialog -->
     <string name="logout_dialog_title">Keep library data?</string>
     <string name="logout_dialog_message">Do you want to keep your playlists and library data? Downloaded songs will always be kept</string>

@@ -35,6 +35,7 @@ import com.metrolist.music.constants.ShowWrappedCardKey
 import com.metrolist.music.constants.WrappedSeenKey
 import com.metrolist.music.db.MusicDatabase
 import com.metrolist.music.db.entities.Album
+import com.metrolist.music.db.entities.Artist as LocalArtist
 import com.metrolist.music.db.entities.LocalItem
 import com.metrolist.music.db.entities.Song
 import com.metrolist.music.db.entities.SpeedDialItem
@@ -116,6 +117,14 @@ class HomeViewModel @Inject constructor(
     val communityPlaylists = MutableStateFlow<List<CommunityPlaylistItem>?>(null)
     val selectedChip = MutableStateFlow<HomePage.Chip?>(null)
     private val previousHomePage = MutableStateFlow<HomePage?>(null)
+
+    // Spotify-style personal shelves
+    val recentlyPlayed = MutableStateFlow<List<Song>?>(null)
+    val mostPlayed = MutableStateFlow<List<Song>?>(null)
+    val favoriteSongs = MutableStateFlow<List<Song>?>(null)
+    val recentlyAdded = MutableStateFlow<List<Song>?>(null)
+    val popularArtists = MutableStateFlow<List<LocalArtist>?>(null)
+    val recommendedAlbums = MutableStateFlow<List<AlbumItem>?>(null)
 
     // Official API data for podcast sections
     val savedPodcastShows = MutableStateFlow<List<com.metrolist.innertube.models.PodcastItem>>(emptyList())
@@ -455,6 +464,42 @@ class HomeViewModel @Inject constructor(
                     .filterVideoSongs(hideVideoSongs).shuffled().take(20)
             }
 
+            // Spotify-style personal shelves (local DB only, stays fast)
+            launch(Dispatchers.IO) {
+                recentlyPlayed.value = database.recentlyPlayedSongs(limit = 20)
+                    .first().filterVideoSongs(hideVideoSongs).take(20)
+            }
+
+            launch(Dispatchers.IO) {
+                favoriteSongs.value = database.likedSongsByCreateDateDesc(limit = 20, offset = 0)
+                    .filterVideoSongs(hideVideoSongs)
+            }
+
+            launch(Dispatchers.IO) {
+                mostPlayed.value = database.mostPlayedSongs(
+                    fromTimeStamp = LocalDateTime.now().minusYears(3),
+                    limit = 20,
+                    offset = 0,
+                    toTimeStamp = LocalDateTime.now(),
+                ).first().filterVideoSongs(hideVideoSongs).take(20)
+            }
+
+            launch(Dispatchers.IO) {
+                recentlyAdded.value = database.songsByCreateDateAsc()
+                    .first().reversed().take(20)
+            }
+
+            launch(Dispatchers.IO) {
+                popularArtists.value = database.mostPlayedArtists(
+                    fromTimeStamp = LocalDateTime.now().minusDays(30),
+                    limit = 12,
+                )
+                    .first()
+                    .filter { it.thumbnailUrl != null }
+                    .distinctBy { it.id }
+                    .take(12)
+            }
+
             launch(Dispatchers.IO) {
                 val songs = database.mostPlayedSongs(fromTimeStamp = fromTimeStamp, limit = 15, offset = 5, toTimeStamp = LocalDateTime.now()).first()
                     .filterVideoSongs(hideVideoSongs).shuffled().take(10)
@@ -467,8 +512,8 @@ class HomeViewModel @Inject constructor(
 
             launch(Dispatchers.IO) {
                 YouTube.home().onSuccess { page ->
-                    homePage.value = page.copy(
-                        sections = page.sections.mapNotNull { section ->
+                    val filteredSections =
+                        page.sections.mapNotNull { section ->
                             val filtered = section.items
                                 .filterOutNulls()
                                 .filterExplicit(hideExplicit)
@@ -476,7 +521,16 @@ class HomeViewModel @Inject constructor(
                                 .filterYoutubeShorts(hideYoutubeShorts)
                             if (filtered.isEmpty()) null else section.copy(items = filtered)
                         }
-                    )
+                    homePage.value = page.copy(sections = filteredSections)
+
+                    // "Recommended albums" shelf: unique albums across the YouTube home feed
+                    recommendedAlbums.value = filteredSections.asSequence()
+                        .flatMap { it.items.asSequence() }
+                        .filterIsInstance<AlbumItem>()
+                        .distinctBy { it.id }
+                        .toList()
+                        .take(20)
+                        .ifEmpty { null }
                 }.onFailure { reportException(it) }
             }
 
