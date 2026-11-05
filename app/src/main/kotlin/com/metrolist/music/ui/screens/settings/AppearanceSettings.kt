@@ -111,6 +111,7 @@ import com.metrolist.music.ui.component.PlayerSliderTrack
 import com.metrolist.music.ui.component.SquigglySlider
 import com.metrolist.music.ui.component.WavySlider
 import com.metrolist.music.ui.theme.DefaultThemeColor
+import com.metrolist.music.ui.theme.DefaultSeedColor
 import com.metrolist.music.ui.theme.PlayerSliderColors
 import com.metrolist.music.ui.utils.backToMain
 import com.metrolist.music.utils.IconUtils
@@ -154,10 +155,12 @@ fun AppearanceSettings(
     val (selectedThemeColorInt) =
         rememberPreference(
             SelectedThemeColorKey,
-            defaultValue = DefaultThemeColor.toArgb(),
+            defaultValue = DefaultSeedColor.toArgb(),
         )
-    // Check if user has selected a custom color (not the default/dynamic color)
-    val isUsingCustomColor = selectedThemeColorInt != DefaultThemeColor.toArgb()
+    // Not custom = the default Melora blue-pink blend, or the "dynamic colours" marker
+    val isUsingCustomColor =
+        selectedThemeColorInt != DefaultSeedColor.toArgb() &&
+            selectedThemeColorInt != DefaultThemeColor.toArgb()
 
     val (useNewPlayerDesign, onUseNewPlayerDesignChange) =
         rememberPreference(

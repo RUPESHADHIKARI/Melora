@@ -25,7 +25,12 @@ import com.materialkolor.dynamiccolor.ColorSpec
 import com.materialkolor.rememberDynamicColorScheme
 import com.materialkolor.score.Score
 
-val DefaultThemeColor = Color(0xFFEC4899) // Melora brand pink
+val DefaultThemeColor = Color(0xFFEC4899) // Melora brand pink ("Dynamic colours" marker)
+
+// Default app theme: a blue-pink blend matching the MELORA logo gradient.
+// Material 3 derives the whole palette from this seed, so the result mixes
+// blue primary tones with warm pink tertiary accents in both light and dark.
+val DefaultSeedColor = Color(0xFF826BD1)
 
 @Composable
 fun MeloraTheme(
