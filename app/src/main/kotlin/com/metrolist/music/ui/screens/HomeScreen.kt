@@ -7,6 +7,11 @@ package com.metrolist.music.ui.screens
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -86,6 +91,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
@@ -116,6 +122,7 @@ import com.metrolist.music.LocalDatabase
 import com.metrolist.music.LocalArtistNameAliases
 import com.metrolist.music.LocalListenTogetherManager
 import com.metrolist.music.LocalPlayerAwareWindowInsets
+import com.metrolist.music.models.MediaMetadata
 import com.metrolist.music.LocalPlayerConnection
 import com.metrolist.music.R
 import com.metrolist.music.constants.AutoRadioQueueKey
@@ -128,6 +135,7 @@ import com.metrolist.music.constants.ListThumbnailSize
 import com.metrolist.music.constants.RandomizeHomeOrderKey
 import com.metrolist.music.constants.SmallGridThumbnailHeight
 import com.metrolist.music.constants.ThumbnailCornerRadius
+import com.metrolist.music.constants.UserNameKey
 import com.metrolist.music.db.entities.Album
 import com.metrolist.music.db.entities.Artist
 import com.metrolist.music.db.entities.LocalItem
@@ -175,6 +183,7 @@ import com.metrolist.music.utils.rememberPreference
 import com.metrolist.music.viewmodels.CommunityPlaylistItem
 import com.metrolist.music.viewmodels.HomeViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -227,7 +236,7 @@ sealed interface QuickCell {
     data class Yt(val item: YTItem) : QuickCell
 }
 
-/** Keeps only the items matching the selected home category pill (All / Music / Playlists / Albums). */
+/** Keeps only the items matching the selected home category pill (All / Music / Playlists / Albums / Artists). */
 fun filterItemsForCategory(
     category: Int,
     items: List<YTItem>,
@@ -236,8 +245,473 @@ fun filterItemsForCategory(
         1 -> items.filterIsInstance<SongItem>()
         2 -> items.filterIsInstance<PlaylistItem>()
         3 -> items.filterIsInstance<AlbumItem>()
+        4 -> items.filterIsInstance<ArtistItem>()
         else -> items
     }
+
+/** One "Feel the Vibes" hero banner page: playlist name + artwork + Play pill. */
+data class HeroBanner(
+    val title: String,
+    val subtitle: String,
+    val image: Any? = null,
+    val iconRes: Int? = null,
+    /** Marks the page that mirrors live playback; it shows the "Now Playing" chip. */
+    val nowPlaying: Boolean = false,
+    val onPlay: () -> Unit = {},
+    val onOpen: () -> Unit = {},
+)
+
+/** "Feel the Vibes" hero carousel: banners for what the user plays, likes, and pins, with Play pill and dots. */
+@Composable
+private fun VibeHeroCarousel(
+    banners: List<HeroBanner>,
+    isPlaying: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val pagerState = rememberPagerState(pageCount = { banners.size })
+    val scope = rememberCoroutineScope()
+
+    Column(modifier = modifier.fillMaxWidth()) {
+        HorizontalPager(
+            state = pagerState,
+            contentPadding = PaddingValues(horizontal = 24.dp),
+            pageSpacing = 12.dp,
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .height(210.dp),
+        ) { page ->
+            val banner = banners[page]
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(24.dp))
+                        .clickable { banner.onOpen() },
+            ) {
+                if (banner.image != null) {
+                    AsyncImage(
+                        model = banner.image,
+                        contentDescription = banner.title,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.matchParentSize(),
+                    )
+
+                    Box(
+                        modifier =
+                            Modifier
+                                .matchParentSize()
+                                .background(
+                                    Brush.verticalGradient(
+                                        listOf(Color.Black.copy(alpha = 0.15f), Color.Black.copy(alpha = 0.6f)),
+                                    ),
+                                ),
+                    )
+                } else {
+                    // Campaign gradient for banners without artwork.
+                    Box(
+                        modifier =
+                            Modifier
+                                .matchParentSize()
+                                .background(
+                                    Brush.linearGradient(
+                                        listOf(Color(0xFF7B5AF7), Color(0xFF4A2BB5), Color(0xFF1B1150)),
+                                    ),
+                                ),
+                    )
+                    Icon(
+                        painter = painterResource(banner.iconRes ?: R.drawable.music_note),
+                        contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.22f),
+                        modifier = Modifier.align(Alignment.CenterEnd).size(150.dp).padding(end = 28.dp),
+                    )
+                }
+
+                // Live playback chip: breathing dot while playing, steady when paused.
+                if (banner.nowPlaying) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier =
+                            Modifier
+                                .align(Alignment.TopStart)
+                                .padding(16.dp)
+                                .clip(RoundedCornerShape(50))
+                                .background(Color.Black.copy(alpha = 0.45f))
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                    ) {
+                        if (isPlaying) {
+                            val dot = rememberInfiniteTransition(label = "nowPlayingDot").animateFloat(
+                                0.25f,
+                                1f,
+                                infiniteRepeatable(tween(840), RepeatMode.Reverse),
+                                label = "dotAlpha",
+                            )
+                            NowPlayingDot(alpha = dot.value)
+                        } else {
+                            NowPlayingDot(alpha = 1f)
+                        }
+                        Text(
+                            text = stringResource(R.string.now_playing),
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                }
+
+                Column(
+                    modifier = Modifier.align(Alignment.BottomStart).padding(20.dp),
+                ) {
+                    Text(
+                        text = banner.title,
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth(0.72f),
+                    )
+                    Text(
+                        text = banner.subtitle,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White.copy(alpha = 0.85f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier =
+                            Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(Color.White)
+                                .clickable(onClick = banner.onPlay)
+                                .padding(horizontal = 20.dp, vertical = 10.dp),
+                    ) {
+                        Icon(
+                            painter =
+                                painterResource(
+                                    if (banner.nowPlaying && isPlaying) R.drawable.pause else R.drawable.play,
+                                ),
+                            contentDescription = null,
+                            tint = Color.Black,
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Text(
+                            text =
+                                stringResource(
+                                    if (banner.nowPlaying && isPlaying) R.string.pause else R.string.play,
+                                ),
+                            color = Color.Black,
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                    }
+                }
+
+                // Next-page affordance on the right edge (hidden on the last page)
+                if (page < banners.size - 1) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier =
+                            Modifier
+                                .align(Alignment.CenterEnd)
+                                .padding(end = 10.dp)
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(Color.Black.copy(alpha = 0.35f))
+                                .clickable {
+                                    val next = min(pagerState.currentPage + 1, banners.size - 1)
+                                    scope.launch { pagerState.animateScrollToPage(next) }
+                                },
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.arrow_forward),
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                }
+            }
+        }
+
+        if (banners.size > 1) {
+            Row(
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+            ) {
+                repeat(banners.size) { index ->
+                    val active = pagerState.currentPage == index
+                    Box(
+                        modifier =
+                            Modifier
+                                .padding(horizontal = 4.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    if (active) {
+                                        MaterialTheme.colorScheme.onSurface
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+                                    },
+                                )
+                                .size(if (active) 7.dp else 5.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Pulsing indicator dot inside the "Now Playing" hero chip (brand cyan). */
+@Composable
+private fun NowPlayingDot(alpha: Float) {
+    Box(
+        modifier =
+            Modifier
+                .size(8.dp)
+                .clip(CircleShape)
+                .background(Color(0xFF22D3EE).copy(alpha = alpha)),
+    )
+}
+
+/** Liked Songs entry card (gradient + badge), first card of Recently Played. */
+@Composable
+private fun LikedSongsCard(
+    songCount: Int,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier) {
+        Box(
+            modifier =
+                Modifier
+                    .size(148.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(
+                        Brush.linearGradient(listOf(Color(0xFF4F6DF5), Color(0xFFA06CD5))),
+                    )
+                    .clickable(onClick = onClick),
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.music_note),
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.align(Alignment.Center).size(52.dp),
+            )
+            Icon(
+                painter = painterResource(R.drawable.favorite),
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.align(Alignment.TopEnd).padding(10.dp).size(20.dp),
+            )
+        }
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = stringResource(R.string.liked_songs),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            text =
+                joinByBullet(
+                    stringResource(R.string.card_playlist),
+                    pluralStringResource(R.plurals.card_song_count, songCount, songCount),
+                ),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+/** Recently Played big card: square art with a play overlay, title + artist below. */
+@Composable
+private fun RecentlyPlayedCard(
+    song: Song,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier) {
+        Box(
+            modifier =
+                Modifier
+                    .size(148.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .combinedClickable(
+                        onClick = onClick,
+                        onLongClick = onLongClick,
+                    ),
+        ) {
+            AsyncImage(
+                model = song.thumbnailUrl,
+                contentDescription = song.title,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.matchParentSize(),
+            )
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier =
+                    Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(8.dp)
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(Color.White)
+                        .clickable(onClick = onClick),
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.play),
+                    contentDescription = null,
+                    tint = Color.Black,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = song.title,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            text = song.artists.joinToString { it.name },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+/** Now-playing banner card (mock's "Keep Listening"): art, title, progress bar, pause + menu. */
+@Composable
+private fun NowPlayingCard(
+    mediaMetadata: MediaMetadata,
+    isPlaying: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val playerConnection = LocalPlayerConnection.current
+    val database = LocalDatabase.current
+    val menuState = LocalMenuState.current
+    val dbSong by database.song(mediaMetadata.id).collectAsStateWithLifecycle(initialValue = null)
+
+    var position by remember(mediaMetadata.id) { mutableLongStateOf(0L) }
+    LaunchedEffect(mediaMetadata.id) {
+        val p = playerConnection?.player ?: return@LaunchedEffect
+        while (true) {
+            position = p.currentPosition
+            delay(500)
+        }
+    }
+
+    val progress =
+        if (mediaMetadata.duration > 0) {
+            (position / 1000f / mediaMetadata.duration).coerceIn(0f, 1f)
+        } else {
+            0f
+        }
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier =
+            modifier
+                .padding(horizontal = 16.dp)
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(20.dp))
+                .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp))
+                .padding(12.dp),
+    ) {
+        AsyncImage(
+            model = mediaMetadata.thumbnailUrl,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.size(64.dp).clip(RoundedCornerShape(14.dp)),
+        )
+        Column(
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.weight(1f).padding(horizontal = 12.dp),
+        ) {
+            Text(
+                text = mediaMetadata.title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = mediaMetadata.artists.joinToString { it.name },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(4.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f)),
+            ) {
+                Box(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth(progress)
+                            .height(4.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary),
+                )
+            }
+        }
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier =
+                Modifier
+                    .size(46.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.onPrimary)
+                    .clickable { playerConnection?.togglePlayPause() },
+        ) {
+            Icon(
+                painter = painterResource(if (isPlaying) R.drawable.pause else R.drawable.play),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(22.dp),
+            )
+        }
+        IconButton(
+            onClick = {
+                dbSong?.let { song ->
+                    menuState.show {
+                        SongMenu(
+                            originalSong = song,
+                            onDismiss = menuState::dismiss,
+                        )
+                    }
+                }
+            },
+            modifier = Modifier.size(40.dp),
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.more_vert),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
 
 @Composable
 fun CommunityPlaylistCard(
@@ -695,6 +1169,7 @@ fun HomeScreen(
 
     val isPlaying by playerConnection.isEffectivelyPlaying.collectAsStateWithLifecycle()
     val mediaMetadata by playerConnection.mediaMetadata.collectAsStateWithLifecycle()
+    val queueTitle by playerConnection.queueTitle.collectAsStateWithLifecycle()
 
     val quickPicks by viewModel.quickPicks.collectAsStateWithLifecycle()
     val forgottenFavorites by viewModel.forgottenFavorites.collectAsStateWithLifecycle()
@@ -720,7 +1195,7 @@ fun HomeScreen(
     val pinnedSpeedDialItems by viewModel.pinnedSpeedDialItems.collectAsStateWithLifecycle()
     val selectedChip by viewModel.selectedChip.collectAsStateWithLifecycle()
 
-    // Spotify-style category pills: 0 = All, 1 = Music, 2 = Playlists, 3 = Albums
+    // Spotify-style category pills: 0 = All, 1 = Music, 2 = Playlists, 3 = Albums, 4 = Artists
     var selectedHomeCategory by rememberSaveable { mutableIntStateOf(0) }
 
     // Official podcast API data
@@ -739,6 +1214,7 @@ fun HomeScreen(
     val accountImageUrl by viewModel.accountImageUrl.collectAsStateWithLifecycle()
     val innerTubeCookie by rememberPreference(InnerTubeCookieKey, "")
     val (randomizeHomeOrder) = rememberPreference(RandomizeHomeOrderKey, true)
+    val (userName) = rememberPreference(UserNameKey, "")
     val autoRadioQueue by rememberPreference(AutoRadioQueueKey, defaultValue = true)
 
     LaunchedEffect(Unit) { viewModel.loadHomeData() }
@@ -1087,6 +1563,7 @@ fun HomeScreen(
             recentlyAdded,
             popularArtists,
             recommendedAlbums,
+            mediaMetadata,
             homePage?.sections,
             explorePage?.moodAndGenres,
         ) {
@@ -1096,17 +1573,17 @@ fun HomeScreen(
             val showAlbums = selectedHomeCategory == 0 || selectedHomeCategory == 3
             val showAllOnly = selectedHomeCategory == 0
 
-            if (speedDialItems.isNotEmpty()) list.add(HomeSection.SpeedDial)
             if (showMusic && recentlyPlayed?.isNotEmpty() == true) list.add(HomeSection.RecentlyPlayed)
+            if (showAllOnly && (keepListening?.isNotEmpty() == true || mediaMetadata != null)) list.add(HomeSection.KeepListening)
+            if (showMusic && popularArtists?.isNotEmpty() == true) list.add(HomeSection.PopularArtists)
+            if (speedDialItems.isNotEmpty()) list.add(HomeSection.SpeedDial)
             if (showMusic && mostPlayed?.isNotEmpty() == true) list.add(HomeSection.MostPlayed)
             if (showMusic && favoriteSongs?.isNotEmpty() == true) list.add(HomeSection.LikedSongs)
             if (showMusic && recentlyAdded?.isNotEmpty() == true) list.add(HomeSection.RecentlyAdded)
             if (showMusic && quickPicks?.isNotEmpty() == true) list.add(HomeSection.QuickPicks)
-            if (showMusic && popularArtists?.isNotEmpty() == true) list.add(HomeSection.PopularArtists)
             if (showAlbums && recommendedAlbums?.isNotEmpty() == true) list.add(HomeSection.RecommendedAlbums)
             if (showPlaylists && dailyDiscover?.isNotEmpty() == true) list.add(HomeSection.DailyDiscover)
             if (showPlaylists && accountPlaylists?.isNotEmpty() == true) list.add(HomeSection.AccountPlaylists)
-            if (showAllOnly && keepListening?.isNotEmpty() == true) list.add(HomeSection.KeepListening)
             if (showAllOnly && forgottenFavorites?.isNotEmpty() == true) list.add(HomeSection.ForgottenFavorites)
             if (showPlaylists && communityPlaylists?.isNotEmpty() == true) list.add(HomeSection.FromTheCommunity)
 
@@ -1135,11 +1612,13 @@ fun HomeScreen(
                     // All "main" sections start closer together
                     val base =
                         when (section) {
-                            HomeSection.SpeedDial,
+                            // Mock-fixed top sections: never shuffled, exact mock order
+                            HomeSection.RecentlyPlayed -> 4000
+                            HomeSection.KeepListening -> 3000
+                            HomeSection.PopularArtists -> 2000
+                            HomeSection.SpeedDial -> 1000
+
                             HomeSection.RecommendedAlbums,
-                            HomeSection.PopularArtists,
-                            HomeSection.KeepListening,
-                            HomeSection.RecentlyPlayed,
                             HomeSection.MostPlayed,
                             HomeSection.LikedSongs,
                             HomeSection.RecentlyAdded,
@@ -1161,13 +1640,16 @@ fun HomeScreen(
 
                     val modifier =
                         when (section) {
+                            // Mock-fixed sections: no randomization
+                            HomeSection.RecentlyPlayed,
+                            HomeSection.KeepListening,
+                            HomeSection.PopularArtists,
+                            HomeSection.SpeedDial,
+                            -> 0
+
                             // Top tier: High variance to allow shuffling among themselves
                             // Range: [500-200, 500+400] = [300, 900]
-                            HomeSection.SpeedDial,
                             HomeSection.RecommendedAlbums,
-                            HomeSection.PopularArtists,
-                            HomeSection.KeepListening,
-                            HomeSection.RecentlyPlayed,
                             HomeSection.MostPlayed,
                             HomeSection.LikedSongs,
                             HomeSection.RecentlyAdded,
@@ -1189,13 +1671,13 @@ fun HomeScreen(
             } else {
                 val defaultOrder =
                     mapOf(
-                        HomeSection.SpeedDial to 100,
-                        HomeSection.DailyDiscover to 96,
-                        HomeSection.RecentlyPlayed to 94,
+                        HomeSection.RecentlyPlayed to 100,
+                        HomeSection.KeepListening to 96,
+                        HomeSection.PopularArtists to 95,
+                        HomeSection.SpeedDial to 94,
                         HomeSection.RecommendedAlbums to 92,
-                        HomeSection.PopularArtists to 91,
+                        HomeSection.DailyDiscover to 91,
                         HomeSection.AccountPlaylists to 90,
-                        HomeSection.KeepListening to 87,
                         HomeSection.MostPlayed to 85,
                         HomeSection.LikedSongs to 83,
                         HomeSection.RecentlyAdded to 80,
@@ -1333,6 +1815,44 @@ fun HomeScreen(
                 state = lazylistState,
                 contentPadding = LocalPlayerAwareWindowInsets.current.asPaddingValues(),
             ) {
+                // Spotify-style greeting + tagline under the top bar (per mock layout)
+                item(key = "home_greeting") {
+                    val greetingRes =
+                        remember {
+                            val hour = java.time.LocalTime.now().hour
+                            when {
+                                hour in 5..11 -> R.string.good_morning
+                                hour in 12..17 -> R.string.good_afternoon
+                                else -> R.string.good_evening
+                            }
+                        }
+                    val firstName = userName.trim()
+                    val greetingText =
+                        if (firstName.isNotEmpty()) {
+                            "${stringResource(R.string.greeting_name_format, stringResource(greetingRes), firstName)} 👋"
+                        } else {
+                            "${stringResource(greetingRes)} 👋"
+                        }
+                    Column(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                    ) {
+                        Text(
+                            text = greetingText,
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = stringResource(R.string.home_subtitle),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+
                 item(key = "home_category_pills") {
                     val categories =
                         listOf(
@@ -1340,6 +1860,7 @@ fun HomeScreen(
                             stringResource(R.string.home_filter_music),
                             stringResource(R.string.home_filter_playlists),
                             stringResource(R.string.home_filter_albums),
+                            stringResource(R.string.home_filter_artists),
                         )
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1376,6 +1897,148 @@ fun HomeScreen(
                                         .padding(horizontal = 18.dp, vertical = 8.dp),
                             )
                         }
+                    }
+                }
+
+                // "Feel the Vibes" hero carousel (All / Music / Albums filters)
+                // Banners: what the user keeps playing, their Liked Songs, and pinned playlists.
+                if (selectedHomeCategory == 0 || selectedHomeCategory == 1 || selectedHomeCategory == 3) {
+                    item(key = "hero_mix") {
+                        val heroTitle = stringResource(R.string.hero_title)
+                        val heroSubtitle = stringResource(R.string.your_mix_subtitle)
+                        val playlistWord = stringResource(R.string.card_playlist)
+                        val likedTitle = stringResource(R.string.liked_songs)
+                        val likedCount = favoriteSongs?.size ?: 0
+                        val likedSubtitle =
+                            if (likedCount > 0) {
+                                joinByBullet(
+                                    playlistWord,
+                                    pluralStringResource(R.plurals.card_song_count, likedCount, likedCount),
+                                )
+                            } else {
+                                ""
+                            }
+
+                        val heroBanners =
+                            buildList {
+                                // 1. What the user keeps playing right now.
+                                mediaMetadata?.let { mm ->
+                                    add(
+                                        HeroBanner(
+                                            title = queueTitle ?: mm.title,
+                                            subtitle = mm.artists.joinToString { it.name },
+                                            image = mm.thumbnailUrl,
+                                            nowPlaying = true,
+                                            onPlay = { playerConnection.togglePlayPause() },
+                                        ),
+                                    )
+                                }
+
+                                // 2. The user's favorite playlist (Liked Songs).
+                                if (likedCount > 0) {
+                                    // "Liked Songs" queue is live: toggle playback instead
+                                    // of restarting the queue.
+                                    val likedCurrent = queueTitle == likedTitle
+                                    add(
+                                        HeroBanner(
+                                            title = likedTitle,
+                                            subtitle = likedSubtitle,
+                                            image = favoriteSongs?.first()?.thumbnailUrl,
+                                            iconRes = R.drawable.favorite,
+                                            nowPlaying = likedCurrent,
+                                            onPlay = {
+                                                if (!isListenTogetherGuest) {
+                                                    if (likedCurrent) {
+                                                        playerConnection.togglePlayPause()
+                                                    } else {
+                                                        favoriteSongs?.let { liked ->
+                                                            val queueItems = liked.distinctBy { it.id }.map { it.toMediaItem() }
+                                                            if (queueItems.isNotEmpty()) {
+                                                                playerConnection.playQueue(
+                                                                    ListQueue(title = likedTitle, items = queueItems),
+                                                                )
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                            onOpen = { navController.navigate("auto_playlist/liked") },
+                                        ),
+                                    )
+                                }
+
+                                // 3. Playlists the user pinned (shared with speed dial) —
+                                // featured up to 5 banner pages in total so the carousel
+                                // mirrors the playlists they keep on playing.
+                                val playlistLimit = (5 - size).coerceAtLeast(0)
+                                pinnedSpeedDialItems
+                                    .filter { it.type == "PLAYLIST" || it.type == "LOCAL_PLAYLIST" }
+                                    .map { pinned ->
+                                        // The banner is live when its playlist is the one playing.
+                                        pinned to (queueTitle == pinned.title)
+                                    }
+                                    .take(playlistLimit)
+                                    .forEach { (pinned, isLivingQueue) ->
+                                        val isLocal = pinned.type == "LOCAL_PLAYLIST"
+                                        add(
+                                            HeroBanner(
+                                                title = pinned.title,
+                                                subtitle = pinned.subtitle ?: playlistWord,
+                                                image = pinned.thumbnailUrl,
+                                                nowPlaying = isLivingQueue,
+                                                onPlay = {
+                                                    if (!isListenTogetherGuest) {
+                                                        if (isLocal) {
+                                                            navController.navigate("local_playlist/${pinned.id}")
+                                                        } else if (isLivingQueue) {
+                                                            // Already live: pause/resume, never restart.
+                                                            playerConnection.togglePlayPause()
+                                                        } else {
+                                                            playerConnection.playQueue(
+                                                                YouTubeQueue(
+                                                                    WatchEndpoint(playlistId = pinned.id.removePrefix("VL")),
+                                                                ),
+                                                            )
+                                                        }
+                                                    }
+                                                },
+                                                onOpen = {
+                                                    navController.navigate(
+                                                        if (isLocal) {
+                                                            "local_playlist/${pinned.id}"
+                                                        } else {
+                                                            "online_playlist/${pinned.id}"
+                                                        },
+                                                    )
+                                                },
+                                            ),
+                                        )
+                                    }
+
+                                // Fallback campaign banner when there is nothing to feature yet.
+                                if (isEmpty()) {
+                                    add(
+                                        HeroBanner(
+                                            title = heroTitle,
+                                            subtitle = heroSubtitle,
+                                            onPlay = {
+                                                if (!isListenTogetherGuest) {
+                                                    val queueItems =
+                                                        (recentlyPlayed ?: favoriteSongs)?.distinctBy { it.id }?.map { it.toMediaItem() }.orEmpty()
+                                                    if (queueItems.isNotEmpty()) {
+                                                        playerConnection.playQueue(ListQueue(title = heroTitle, items = queueItems))
+                                                    }
+                                                }
+                                            },
+                                        ),
+                                    )
+                                }
+                            }
+
+                        VibeHeroCarousel(
+                            banners = heroBanners,
+                            isPlaying = isPlaying,
+                        )
                     }
                 }
 
@@ -2148,15 +2811,36 @@ fun HomeScreen(
                         }
 
                         HomeSection.KeepListening -> {
-                            keepListening?.takeIf { it.isNotEmpty() }?.let { keepListening ->
+                            val keepList = keepListening.orEmpty()
+                            val hasGrid = keepList.isNotEmpty()
+                            val hasNow = mediaMetadata != null
+                            if (hasGrid || hasNow) {
                                 item(key = "keep_listening_title") {
-                                    NavigationTitle(
-                                        title = stringResource(R.string.keep_listening),
-                                    )
+                                    if (hasNow) {
+                                        NavigationTitle(
+                                            title = stringResource(R.string.keep_listening),
+                                            onClick = { navController.navigate("history") },
+                                            seeAllLabel = true,
+                                        )
+                                    } else {
+                                        NavigationTitle(
+                                            title = stringResource(R.string.keep_listening),
+                                        )
+                                    }
                                 }
 
-                                item(key = "keep_listening_list") {
-                                    val rows = if (keepListening.size > 6) 2 else 1
+                                // Mock-style now-playing banner takes over while a track is loaded;
+                                // the Keep Listening grid is preserved as the fallback otherwise.
+                                if (hasNow) {
+                                    item(key = "keep_listening_now") {
+                                        NowPlayingCard(
+                                            mediaMetadata = mediaMetadata!!,
+                                            isPlaying = isPlaying,
+                                        )
+                                    }
+                                } else if (hasGrid) {
+                                    item(key = "keep_listening_list") {
+                                    val rows = if (keepList.size > 6) 2 else 1
                                     LazyHorizontalGrid(
                                         state = remember("keep_listening_grid") { LazyGridState() },
                                         rows = GridCells.Fixed(rows),
@@ -2179,9 +2863,10 @@ fun HomeScreen(
                                                     ) * rows,
                                                 ),
                                     ) {
-                                        items(keepListening.distinctBy { it.id }, key = { "home_keep_listening_${it.id}" }) {
+                                        items(keepList.distinctBy { it.id }, key = { "home_keep_listening_${it.id}" }) {
                                             localGridItem(it)
                                         }
+                                    }
                                     }
                                 }
                             }
@@ -2190,47 +2875,52 @@ fun HomeScreen(
                         HomeSection.RecentlyPlayed -> {
                             recentlyPlayed?.takeIf { it.isNotEmpty() }?.let { recentlyPlayedSongs ->
                                 item(key = "recently_played_title") {
-                                    val shelfTitle = stringResource(R.string.recently_played)
                                     NavigationTitle(
-                                        title = shelfTitle,
+                                        title = stringResource(R.string.recently_played),
                                         onClick = { navController.navigate("history") },
-                                        onPlayAllClick =
-                                            if (!isListenTogetherGuest) {
-                                                {
-                                                    val queueItems = recentlyPlayedSongs.distinctBy { it.id }.map { it.toMediaItem() }
-                                                    if (queueItems.isNotEmpty()) {
-                                                        playerConnection.playQueue(
-                                                            ListQueue(
-                                                                title = shelfTitle,
-                                                                items = queueItems,
-                                                            ),
-                                                        )
-                                                    }
-                                                }
-                                            } else {
-                                                null
-                                            },
+                                        seeAllLabel = true,
                                     )
                                 }
                                 item(key = "recently_played_list") {
-                                    val rows = if (recentlyPlayedSongs.size > 4) 2 else 1
-                                    LazyHorizontalGrid(
-                                        state = remember("recently_played_grid") { LazyGridState() },
-                                        rows = GridCells.Fixed(rows),
-                                        contentPadding =
-                                            WindowInsets.systemBars
-                                                .only(WindowInsetsSides.Horizontal)
-                                                .asPaddingValues(),
-                                        modifier =
-                                            Modifier
-                                                .fillMaxWidth()
-                                                .height(ListItemHeight * rows),
+                                    LazyRow(
+                                        contentPadding = PaddingValues(horizontal = 16.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                        state = rememberLazyListState(),
+                                        modifier = Modifier.fillMaxWidth(),
                                     ) {
+                                        favoriteSongs?.takeIf { it.isNotEmpty() }?.let { liked ->
+                                            item(key = "recently_played_liked") {
+                                                LikedSongsCard(
+                                                    songCount = liked.size,
+                                                    onClick = { navController.navigate("auto_playlist/liked") },
+                                                )
+                                            }
+                                        }
                                         items(
                                             items = recentlyPlayedSongs.distinctBy { it.id },
                                             key = { "home_recently_played_${it.id}" },
                                         ) { song ->
-                                            shelfSongGridItem(song, stringResource(R.string.recently_played))
+                                            RecentlyPlayedCard(
+                                                song = song,
+                                                onClick = {
+                                                    if (!isListenTogetherGuest) {
+                                                        playerConnection.playQueue(
+                                                            ListQueue(
+                                                                title = song.title,
+                                                                items = listOf(song.toMediaItem()),
+                                                            ),
+                                                        )
+                                                    }
+                                                },
+                                                onLongClick = {
+                                                    menuState.show {
+                                                        SongMenu(
+                                                            originalSong = song,
+                                                            onDismiss = menuState::dismiss,
+                                                        )
+                                                    }
+                                                },
+                                            )
                                         }
                                     }
                                 }
@@ -2415,7 +3105,7 @@ fun HomeScreen(
                                 item(key = "popular_artists_content") {
                                     LazyRow(
                                         contentPadding = PaddingValues(horizontal = 16.dp),
-                                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(14.dp),
                                         state = rememberLazyListState(),
                                         modifier = Modifier.fillMaxWidth(),
                                     ) {
@@ -2430,7 +3120,7 @@ fun HomeScreen(
                                                 Box(
                                                     modifier =
                                                         Modifier
-                                                            .size(120.dp)
+                                                            .size(100.dp)
                                                             .clip(CircleShape)
                                                             .background(MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)),
                                                 ) {

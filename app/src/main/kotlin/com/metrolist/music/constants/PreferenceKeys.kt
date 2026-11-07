@@ -260,6 +260,11 @@ val WrappedSeenKey = booleanPreferencesKey("wrapped_seen")
 val LastSeenVersionKey = stringPreferencesKey("lastSeenVersion")
 val RandomizeHomeOrderKey = booleanPreferencesKey("randomizeHomeOrder")
 
+// First-launch onboarding: stores the user's first name and whether the
+// welcome flow has already been shown once.
+val UserNameKey = stringPreferencesKey("userName")
+val OnboardingCompletedKey = booleanPreferencesKey("onboardingCompleted")
+
 val ShowLikedPlaylistKey = booleanPreferencesKey("show_liked_playlist")
 val ShowDownloadedPlaylistKey = booleanPreferencesKey("show_downloaded_playlist")
 val ShowTopPlaylistKey = booleanPreferencesKey("show_top_playlist")

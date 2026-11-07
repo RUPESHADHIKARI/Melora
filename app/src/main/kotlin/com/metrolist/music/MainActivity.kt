@@ -202,6 +202,9 @@ import com.metrolist.music.ui.theme.ColorSaver
 import com.metrolist.music.ui.theme.DefaultThemeColor
 import com.metrolist.music.ui.theme.DefaultSeedColor
 import com.metrolist.music.ui.splash.MeloraSplashOverlay
+import com.metrolist.music.ui.onboarding.MeloraOnboardingFlow
+import com.metrolist.music.constants.OnboardingCompletedKey
+import com.metrolist.music.constants.UserNameKey
 import com.metrolist.music.ui.theme.MeloraTheme
 import com.metrolist.music.ui.theme.extractThemeColor
 import com.metrolist.music.ui.utils.appBarScrollBehavior
@@ -319,15 +322,21 @@ class MainActivity : FragmentActivity() {
         }
     }
 
-    override fun onStart() {
-        super.onStart()
-        // Request notification permission on Android 13+
+    /**
+     * Asks for the Android 13+ notification permission when it is not granted
+     * yet. Deliberately only invoked from the composition (after onboarding
+     * completes) so the system dialog can never cover the first-launch card.
+     */
+    private fun maybeRequestNotificationPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
                 ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1000)
             }
         }
+    }
 
+    override fun onStart() {
+        super.onStart()
         // Start the playback service explicitly once so it can outlive binding.
         // Re-issuing startForegroundService() while an existing service instance is already
         // running can trigger "did not then call startForeground" on some Android 9 devices
@@ -748,6 +757,24 @@ class MainActivity : FragmentActivity() {
                     MeloraSplashOverlay(onFinished = { showSplash = false })
                 }
 
+                // First-launch onboarding (beneath the splash for a seamless hand-off):
+                // stores the user's first name and never shows again once completed.
+                val userNameState = rememberPreference(UserNameKey, defaultValue = "")
+                val onboardingCompletedState = rememberPreference(OnboardingCompletedKey, defaultValue = false)
+                if (!onboardingCompletedState.value) {
+                    MeloraOnboardingFlow(
+                        armed = !showSplash,
+                        savedName = userNameState.value,
+                        onNameSubmitted = { name -> userNameState.value = name },
+                        onFinished = {
+                            onboardingCompletedState.value = true
+                            // Ask for notifications only after the welcome
+                            // choreography fades, so it never covers the card.
+                            maybeRequestNotificationPermission()
+                        },
+                    )
+                }
+
                 val density = LocalDensity.current
                 val configuration = LocalWindowInfo.current
                 val cutoutInsets = WindowInsets.displayCutout
@@ -758,10 +785,17 @@ class MainActivity : FragmentActivity() {
                 val navController = rememberNavController()
 
                 LaunchedEffect(Unit) {
-                    val lastSeenVersion = dataStore.data.first()[LastSeenVersionKey] ?: ""
+                    val preferences = dataStore.data.first()
+                    val lastSeenVersion = preferences[LastSeenVersionKey] ?: ""
                     val currentVersion = BuildConfig.BASE_VERSION_NAME
-                    if (lastSeenVersion != currentVersion) {
+                    // Skip the changelog on brand-new installs while onboarding runs.
+                    if (lastSeenVersion != currentVersion && preferences[OnboardingCompletedKey] == true) {
                         showChangelog.value = true
+                    }
+                    // Later launches: once per process, ask for the missing
+                    // notification permission only after onboarding was done.
+                    if (preferences[OnboardingCompletedKey] == true) {
+                        maybeRequestNotificationPermission()
                     }
                 }
 

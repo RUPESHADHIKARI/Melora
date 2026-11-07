@@ -561,6 +561,21 @@ interface DatabaseDao {
         toTimeStamp: LocalDateTime? = LocalDateTime.now(),
     ): Flow<List<Artist>>
 
+    // Artists only carry a thumbnail once their page has been fetched; the home
+    // "Popular Artists" circles need artwork regardless, so fall back to any
+    // thumbnail from one of the artist's songs.
+    @Query(
+        """
+    SELECT thumbnailUrl
+    FROM song
+    JOIN song_artist_map ON song.id = song_artist_map.songId
+    WHERE song_artist_map.artistId = :artistId
+      AND thumbnailUrl IS NOT NULL
+    LIMIT 1
+    """,
+    )
+    suspend fun findArtistThumbnailFromSong(artistId: String): String?
+
     @Transaction
     @SuppressWarnings(RoomWarnings.QUERY_MISMATCH)
     @Query(

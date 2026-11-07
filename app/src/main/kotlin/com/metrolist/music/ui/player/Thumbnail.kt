@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -48,6 +49,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
@@ -82,7 +84,7 @@ import com.metrolist.music.constants.SeekExtraSeconds
 import com.metrolist.music.constants.SwipeThumbnailKey
 import com.metrolist.music.constants.ThumbnailCornerRadius
 import com.metrolist.music.listentogether.RoomRole
-import com.metrolist.music.ui.component.CastButton
+import com.metrolist.music.ui.component.ResizableIconButton
 import com.metrolist.music.utils.rememberEnumPreference
 import com.metrolist.music.utils.rememberPreference
 import kotlinx.coroutines.delay
@@ -131,7 +133,7 @@ private fun calculateThumbnailDimensions(
         itemWidth = containerWidth,
         containerSize = containerWidth,
         thumbnailSize = effectiveSize,
-        cornerRadius = cornerRadius * 2
+        cornerRadius = 24.dp
     )
 }
 
@@ -202,6 +204,10 @@ fun Thumbnail(
     isPlayerExpanded: () -> Boolean = { true },
     isLandscape: Boolean = false,
     isListenTogetherGuest: Boolean = false,
+    onCollapse: () -> Unit = {},
+    onShowPlayerMenu: (() -> Unit)? = null,
+    sleepTimerEnabled: Boolean = false,
+    onSleepTimer: () -> Unit = {},
 ) {
     val playerConnection = LocalPlayerConnection.current ?: return
     val context = LocalContext.current
@@ -338,7 +344,38 @@ fun Thumbnail(
                     ThumbnailHeader(
                         queueTitle = queueTitle,
                         albumTitle = mediaMetadata?.album?.title,
-                        textColor = textBackgroundColor
+                        textColor = textBackgroundColor,
+                        leading = {
+                            ResizableIconButton(
+                                icon = R.drawable.expand_more,
+                                color = textBackgroundColor,
+                                modifier = Modifier.size(40.dp),
+                                onClick = onCollapse,
+                            )
+                        },
+                        trailing = {
+                            ResizableIconButton(
+                                icon = R.drawable.bedtime,
+                                color =
+                                    if (sleepTimerEnabled) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        textBackgroundColor
+                                    },
+                                modifier =
+                                    Modifier
+                                        .size(40.dp)
+                                        .padding(4.dp)
+                                        .alpha(if (sleepTimerEnabled) 1f else 0.7f),
+                                onClick = onSleepTimer,
+                            )
+                            ResizableIconButton(
+                                icon = R.drawable.more_vert,
+                                color = textBackgroundColor,
+                                modifier = Modifier.size(40.dp),
+                                onClick = { onShowPlayerMenu?.invoke() },
+                            )
+                        }
                     )
                 }
                 
@@ -438,7 +475,9 @@ private fun ThumbnailHeader(
     queueTitle: String?,
     albumTitle: String?,
     textColor: Color,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    leading: (@Composable () -> Unit)? = null,
+    trailing: (@Composable () -> Unit)? = null,
 ) {
     val listenTogetherManager = LocalListenTogetherManager.current
     val listenTogetherRoleState = listenTogetherManager?.role?.collectAsStateWithLifecycle(initialValue = RoomRole.NONE)
@@ -446,10 +485,12 @@ private fun ThumbnailHeader(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .padding(horizontal = 8.dp)
+            .height(52.dp)
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
             modifier = Modifier
                 .align(Alignment.Center)
                 .padding(horizontal = 48.dp)
@@ -463,21 +504,40 @@ private fun ThumbnailHeader(
                 )
             } else {
                 Text(
-                    text = stringResource(R.string.now_playing),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = textColor
+                    text = stringResource(R.string.playing_from),
+                    style = MaterialTheme.typography.labelSmall,
+                    letterSpacing = 2.sp,
+                    color = textColor.copy(alpha = 0.7f),
+                    maxLines = 1
                 )
             }
             val playingFrom = queueTitle ?: albumTitle
             if (!playingFrom.isNullOrBlank()) {
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = playingFrom,
                     style = MaterialTheme.typography.titleMedium,
-                    color = textColor.copy(alpha = 0.8f),
+                    fontWeight = FontWeight.Bold,
+                    color = textColor,
                     maxLines = 1,
                     modifier = Modifier.basicMarquee()
                 )
+            }
+        }
+        leading?.let { leadingSlot ->
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.align(Alignment.CenterStart),
+            ) {
+                leadingSlot()
+            }
+        }
+        trailing?.let { trailingSlot ->
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.align(Alignment.CenterEnd),
+            ) {
+                trailingSlot()
             }
         }
     }
@@ -572,17 +632,10 @@ private fun ThumbnailItem(
 
                 ThumbnailImage(
                     artworkUri = artworkUriToUse,
-                    cropArtwork = cropAlbumArt
+                    // force crop so the artwork always fills the card like the mock
+                    cropArtwork = true
                 )
             }
-            
-            // Cast button at top-right corner of thumbnail
-            CastButton(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(8.dp),
-                tintColor = textBackgroundColor
-            )
         }
     }
 }

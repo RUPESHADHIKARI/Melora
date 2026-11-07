@@ -53,12 +53,14 @@ import com.metrolist.music.utils.reportException
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -121,7 +123,17 @@ class HomeViewModel @Inject constructor(
     // Spotify-style personal shelves
     val recentlyPlayed = MutableStateFlow<List<Song>?>(null)
     val mostPlayed = MutableStateFlow<List<Song>?>(null)
-    val favoriteSongs = MutableStateFlow<List<Song>?>(null)
+    // Reactive so liking/unliking a song updates the Liked Songs hero banner
+    // and home section instantly, without waiting for the next load().
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val favoriteSongs: StateFlow<List<Song>?> =
+        context.dataStore.data.map { it[HideVideoSongsKey] ?: false }
+            .flatMapLatest { hideVideoSongs ->
+                database.likedSongsByCreateDateAsc().map { liked ->
+                    liked.asReversed().filterVideoSongs(hideVideoSongs).take(20)
+                }
+            }
+            .stateIn(viewModelScope, SharingStarted.Lazily, null)
     val recentlyAdded = MutableStateFlow<List<Song>?>(null)
     val popularArtists = MutableStateFlow<List<LocalArtist>?>(null)
     val recommendedAlbums = MutableStateFlow<List<AlbumItem>?>(null)
@@ -471,11 +483,6 @@ class HomeViewModel @Inject constructor(
             }
 
             launch(Dispatchers.IO) {
-                favoriteSongs.value = database.likedSongsByCreateDateDesc(limit = 20, offset = 0)
-                    .filterVideoSongs(hideVideoSongs)
-            }
-
-            launch(Dispatchers.IO) {
                 mostPlayed.value = database.mostPlayedSongs(
                     fromTimeStamp = LocalDateTime.now().minusYears(3),
                     limit = 20,
@@ -490,11 +497,26 @@ class HomeViewModel @Inject constructor(
             }
 
             launch(Dispatchers.IO) {
-                popularArtists.value = database.mostPlayedArtists(
+                val found = database.mostPlayedArtists(
                     fromTimeStamp = LocalDateTime.now().minusDays(30),
                     limit = 12,
-                )
-                    .first()
+                ).first()
+
+                // Fallback artwork for artists without a cached thumbnail (common for
+                // never-visited artist pages), so the home circles always render.
+                val resolved =
+                    found.map { artist ->
+                        if (artist.thumbnailUrl == null) {
+                            database.findArtistThumbnailFromSong(artist.id)?.let { thumb ->
+                                database.updateArtistThumbnail(artist.id, thumb)
+                                artist.copy(artist = artist.artist.copy(thumbnailUrl = thumb))
+                            } ?: artist
+                        } else {
+                            artist
+                        }
+                    }
+
+                popularArtists.value = resolved
                     .filter { it.thumbnailUrl != null }
                     .distinctBy { it.id }
                     .take(12)

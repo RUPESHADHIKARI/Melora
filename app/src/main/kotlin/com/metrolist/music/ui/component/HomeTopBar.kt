@@ -65,16 +65,6 @@ fun HomeTopBar(
     onAccountClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val greetingRes =
-        remember {
-            val hour = LocalTime.now().hour
-            when {
-                hour in 5..11 -> R.string.good_morning
-                hour in 12..17 -> R.string.good_afternoon
-                else -> R.string.good_evening
-            }
-        }
-
     Column(
         modifier =
             modifier
@@ -108,29 +98,16 @@ fun HomeTopBar(
                     modifier = Modifier.size(44.dp),
                 )
                 Spacer(modifier = Modifier.width(10.dp))
-                Column {
-                    Text(
-                        text = "MELORA",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 2.sp,
-                        color = MaterialTheme.colorScheme.primary,
-                        maxLines = 1,
-                    )
-                    Text(
-                        text =
-                            if (!accountName.isNullOrBlank() && accountName != "Guest") {
-                                "${stringResource(greetingRes)}, ${accountName}"
-                            } else {
-                                stringResource(greetingRes)
-                            },
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
+                // The time-based greeting moved into the scroll content below
+                // the bar to match the mock layout.
+                Text(
+                    text = "MELORA",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 3.sp,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                )
             }
 
             Row(

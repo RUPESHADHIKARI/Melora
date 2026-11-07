@@ -74,6 +74,7 @@
     <string name="link_copied">Link copied to clipboard</string>
     <string name="starting_radio">Starting radio…</string>
     <string name="now_playing">Now Playing</string>
+    <string name="playing_from">PLAYING FROM</string>
 
     <string name="lyrics">Lyrics</string>
     <string name="close">Close</string>
@@ -858,6 +859,25 @@
     <string name="home_filter_music">Music</string>
     <string name="home_filter_playlists">Playlists</string>
     <string name="home_filter_albums">Albums</string>
+    <string name="home_filter_artists">Artists</string>
+    <string name="see_all">See all</string>
+    <string name="your_mix_subtitle">Your daily music mix</string>
+    <string name="hero_title">Feel the Vibes</string>
+    <string name="home_subtitle">Let\'s play something great today.</string>
+    <string name="card_playlist">Playlist</string>
+
+    <!-- First-launch onboarding -->
+    <string name="onboarding_question">What should we call you?</string>
+    <string name="onboarding_hint">Just your first name is fine.</string>
+    <string name="onboarding_first_name">First name</string>
+    <string name="welcome_title_format">Welcome to MELORA, %1$s!</string>
+    <string name="welcome_title_plain">Welcome to MELORA!</string>
+    <string name="welcome_tagline">Your music, your mood, your world.</string>
+    <string name="greeting_name_format">%1$s, %2$s</string>
+    <plurals name="card_song_count">
+        <item quantity="one">%d song</item>
+        <item quantity="other">%d songs</item>
+    </plurals>
     <string name="made_for_you">Made for you</string>
     <string name="recommended_albums">Recommended albums</string>
     <string name="popular_artists">Popular artists</string>

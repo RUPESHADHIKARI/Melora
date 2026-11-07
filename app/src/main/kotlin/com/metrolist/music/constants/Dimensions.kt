@@ -22,7 +22,7 @@ val SlimNavBarHeight = 64.dp
 val MiniPlayerHeight = 64.dp
 val MinMiniPlayerHeight = 16.dp
 val MiniPlayerBottomSpacing = 8.dp // Space between MiniPlayer and NavigationBar
-val QueuePeekHeight = 64.dp
+val QueuePeekHeight = 40.dp
 val AppBarHeight = 64.dp
 
 val ListItemHeight = 64.dp
@@ -35,7 +35,7 @@ val AlbumThumbnailSize = 144.dp
 
 val ThumbnailCornerRadius = 3.dp
 
-val PlayerHorizontalPadding = 32.dp
+val PlayerHorizontalPadding = 24.dp
 
 val NavigationBarAnimationSpec = spring<Dp>(
     dampingRatio = Spring.DampingRatioNoBouncy,
