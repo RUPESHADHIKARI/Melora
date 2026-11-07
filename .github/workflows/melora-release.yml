@@ -1,7 +1,8 @@
 name: Melora Release
 
 # Publishes a public GitHub Release with an installable APK. Dispatch with a
-# tag (e.g. v1.0.0); the build is the same FOSS debug build as "Melora APK".
+# tag (e.g. v1.0.0); the build is the stable FOSS release build, signed with
+# the shared development key by default.
 on:
   workflow_dispatch:
     inputs:
@@ -60,17 +61,17 @@ jobs:
             -validity 10000 \
             -dname "CN=Android Debug,O=Android,C=US"
 
-      - name: Build FOSS debug APK
-        run: ./gradlew --console=plain :app:assembleFossDebug --warning-mode summary
+      - name: Build FOSS release APK
+        run: ./gradlew --console=plain :app:assembleFossRelease --warning-mode summary
         env:
           MELORA_APPLICATION_ID: com.melora.app
-          MELORA_APP_NAME: Melora - by Rupesh
+          MELORA_APP_NAME: Melora
           MELORA_BUILD_COMMIT: ${{ github.sha }}
 
       - name: Stage release APK
         run: |
           mkdir -p release
-          mv app/build/outputs/apk/foss/debug/*.apk "release/Melora-${{ inputs.tag }}.apk"
+          mv app/build/outputs/apk/foss/release/*.apk "release/Melora-${{ inputs.tag }}.apk"
 
       - name: Publish GitHub Release
         env:
