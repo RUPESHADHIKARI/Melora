@@ -46,6 +46,37 @@ class OnlineSearchSuggestionViewModel
         private val _viewState = MutableStateFlow(SearchSuggestionViewState())
         val viewState = _viewState.asStateFlow()
 
+        // Recent-search rows show the media a query matched (title, artwork, type).
+        // Looked up from the first suggestion item, cached per session; misses are
+        // never retried to keep the landing cheap.
+        private val _historyArtwork = MutableStateFlow<Map<String, YTItem>>(emptyMap())
+        val historyArtwork = _historyArtwork.asStateFlow()
+
+        fun resolveHistoryArtwork(history: List<SearchHistory>) {
+            val pending =
+                history
+                    .asSequence()
+                    .map { it.query }
+                    .filter { it !in _historyArtwork.value }
+                    .distinct()
+                    .take(8)
+                    .toList()
+            if (pending.isEmpty()) return
+            viewModelScope.launch {
+                for (query in pending) {
+                    val item =
+                        YouTube
+                            .searchSuggestions(query)
+                            .getOrNull()
+                            ?.recommendedItems
+                            ?.firstOrNull()
+                    if (item != null) {
+                        _historyArtwork.value = _historyArtwork.value + (query to item)
+                    }
+                }
+            }
+        }
+
         init {
             viewModelScope.launch {
                 query

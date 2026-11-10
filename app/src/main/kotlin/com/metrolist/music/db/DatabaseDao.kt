@@ -1552,10 +1552,6 @@ interface DatabaseDao {
     @Query("SELECT * FROM search_history WHERE `query` LIKE :query || '%' ORDER BY id DESC")
     fun searchHistory(query: String = ""): Flow<List<SearchHistory>>
 
-    @Transaction
-    @Query("DELETE FROM search_history")
-    fun clearSearchHistory()
-
     // Recognition History
     @Transaction
     @Query("SELECT * FROM recognition_history ORDER BY recognizedAt DESC")
@@ -2024,6 +2020,9 @@ interface DatabaseDao {
 
     @Delete
     fun delete(searchHistory: SearchHistory)
+
+    @Query("DELETE FROM search_history")
+    fun clearSearchHistory()
 
     @Delete
     fun delete(event: Event)

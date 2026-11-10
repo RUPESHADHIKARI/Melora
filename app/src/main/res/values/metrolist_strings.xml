@@ -14,6 +14,25 @@
     <string name="album_cover_desc">Album cover</string>
     <string name="top_music_videos">Top music videos</string>
     <string name="trending">Trending</string>
+    <string name="what_to_listen">What do you want to listen to?</string>
+    <string name="recent_searches">Recent searches</string>
+    <string name="clear_all">Clear all</string>
+    <string name="moods">Moods</string>
+    <string name="genres">Genres</string>
+    <string name="new_releases">New releases</string>
+    <string name="voice_search">Voice search</string>
+    <string name="search_subtitle">Find your favorite music...</string>
+    <string name="browse_categories">Browse categories</string>
+    <string name="trending_searches">Trending searches</string>
+    <string name="feel_the_vibe">Feel the vibe</string>
+    <string name="explore_more">Explore more</string>
+    <string name="top_hits">Top hits</string>
+    <string name="fresh_music">Fresh music</string>
+    <string name="type_song">Song</string>
+    <string name="type_artist">Artist</string>
+    <string name="type_album">Album</string>
+    <string name="type_playlist">Playlist</string>
+    <string name="type_video">Video</string>
     <string name="parsed_from_link">Parsed from link</string>
 
     <string name="weeks">Weeks</string>
