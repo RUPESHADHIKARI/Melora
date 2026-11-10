@@ -13,6 +13,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import javax.inject.Inject
 
 @HiltViewModel
@@ -33,9 +34,11 @@ class ChartsViewModel @Inject constructor() : ViewModel() {
             
             YouTube.getChartsPage()
                 .onSuccess { page ->
+                    Timber.i("Charts loaded: ${page.sections.size} sections, titles=${page.sections.map { "${it.title}(${it.items.size})" }}")
                     _chartsPage.value = page
                 }
                 .onFailure { e ->
+                    Timber.e(e, "Failed to load charts")
                     _error.value = "Failed to load charts: ${e.message}"
                 }
             

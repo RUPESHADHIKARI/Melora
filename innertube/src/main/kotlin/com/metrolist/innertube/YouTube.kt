@@ -2026,6 +2026,34 @@ object YouTube {
                             )
                         }
                     }
+
+                    // The classic Top-100 shelves arrive as musicShelfRenderer
+                    // items on some regions; without them the charts page shows
+                    // nothing when YouTube doesn't include carousels.
+                    content.musicShelfRenderer?.let { renderer ->
+                        val title =
+                            renderer.title?.runs?.firstOrNull()?.text ?: return@forEach
+
+                        val items =
+                            renderer.contents
+                                ?.mapNotNull { item ->
+                                    item.musicResponsiveListItemRenderer?.let {
+                                        convertToChartItem(it)
+                                    }
+                                }
+                                .orEmpty()
+                                .filterNotNull()
+
+                        if (items.isNotEmpty()) {
+                            sections.add(
+                                ChartsPage.ChartSection(
+                                    title = title,
+                                    items = items,
+                                    chartType = determineChartType(title),
+                                ),
+                            )
+                        }
+                    }
                 }
 
             ChartsPage(
@@ -2096,6 +2124,20 @@ object YouTube {
                     )
                 }
 
+                renderer.isArtist -> {
+                    ArtistItem(
+                        id = renderer.navigationEndpoint?.browseEndpoint?.browseId ?: return null,
+                        title =
+                            renderer.flexColumns
+                                .firstOrNull()
+                                ?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.firstOrNull()?.text
+                                ?: return null,
+                        thumbnail = renderer.thumbnail?.getThumbnailUrl(),
+                        shuffleEndpoint = null,
+                        radioEndpoint = null,
+                    )
+                }
+
                 else -> {
                     null
                 }
@@ -2160,6 +2202,43 @@ object YouTube {
                             renderer.subtitleBadges?.any {
                                 it.musicInlineBadgeRenderer?.icon?.iconType == "MUSIC_EXPLICIT_BADGE"
                             } == true,
+                    )
+                }
+
+                renderer.isPlaylist -> {
+                    PlaylistItem(
+                        id =
+                            renderer.navigationEndpoint.browseEndpoint
+                                ?.browseId
+                                ?.removePrefix("VL") ?: return null,
+                        title =
+                            renderer.title.runs
+                                ?.firstOrNull()
+                                ?.text ?: return null,
+                        author = PlaylistPage.ownerFromByline(renderer.subtitle?.runs),
+                        songCountText = null,
+                        thumbnail = renderer.thumbnailRenderer.getThumbnailUrl() ?: return null,
+                        playEndpoint = renderer.thumbnailOverlay
+                            ?.musicItemThumbnailOverlayRenderer?.content
+                            ?.musicPlayButtonRenderer?.playNavigationEndpoint
+                            ?.watchPlaylistEndpoint,
+                        shuffleEndpoint = renderer.menu?.menuRenderer?.items?.find {
+                            it.menuNavigationItemRenderer?.icon?.iconType == "MUSIC_SHUFFLE"
+                        }?.menuNavigationItemRenderer?.navigationEndpoint?.watchPlaylistEndpoint,
+                        radioEndpoint = null,
+                    )
+                }
+
+                renderer.isArtist -> {
+                    ArtistItem(
+                        id = renderer.navigationEndpoint.browseEndpoint?.browseId ?: return null,
+                        title =
+                            renderer.title.runs
+                                ?.firstOrNull()
+                                ?.text ?: return null,
+                        thumbnail = renderer.thumbnailRenderer.getThumbnailUrl(),
+                        shuffleEndpoint = null,
+                        radioEndpoint = null,
                     )
                 }
 

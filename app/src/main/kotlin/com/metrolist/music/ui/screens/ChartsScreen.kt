@@ -60,6 +60,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavController
+import com.metrolist.innertube.models.ArtistItem
+import com.metrolist.innertube.models.PlaylistItem
 import com.metrolist.innertube.models.SongItem
 import com.metrolist.innertube.models.WatchEndpoint
 import com.metrolist.music.LocalPlayerAwareWindowInsets
@@ -228,6 +230,12 @@ fun ChartsScreen(
                                 modifier = Modifier.animateItem(),
                             )
                         }
+
+                        val songs = section.items.filterIsInstance<SongItem>().distinctBy { it.id }
+                        val artists = section.items.filterIsInstance<ArtistItem>().distinctBy { it.id }
+                        val playlists = section.items.filterIsInstance<PlaylistItem>().distinctBy { it.id }
+
+                        if (songs.isNotEmpty()) {
                         item(key = "section_content_${section.title}") {
                             BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
                                 val horizontalLazyGridItemWidthFactor = if (maxWidth * 0.475f >= 320.dp) 0.475f else 0.9f
@@ -259,7 +267,7 @@ fun ChartsScreen(
                                             .animateItem(),
                                 ) {
                                     items(
-                                        items = section.items.filterIsInstance<SongItem>().distinctBy { it.id },
+                                        items = songs,
                                         key = { "charts_song_${it.id}" },
                                     ) { song ->
                                         YouTubeListItem(
@@ -309,6 +317,59 @@ fun ChartsScreen(
                                                                 )
                                                             }
                                                         },
+                                                    ),
+                                        )
+                                    }
+                                }
+                            }
+                            }
+                        }
+
+                        if (artists.isNotEmpty()) {
+                            item(key = "section_artists_${section.title}") {
+                                LazyRow(
+                                    contentPadding =
+                                        WindowInsets.systemBars
+                                            .only(WindowInsetsSides.Horizontal)
+                                            .asPaddingValues(),
+                                    modifier = Modifier.animateItem(),
+                                ) {
+                                    items(artists, key = { "charts_artist_${it.id}" }) { artist ->
+                                        YouTubeGridItem(
+                                            item = artist,
+                                            isActive = false,
+                                            isPlaying = false,
+                                            coroutineScope = coroutineScope,
+                                            modifier =
+                                                Modifier
+                                                    .combinedClickable(
+                                                        onClick = { navController.navigate("artist/${artist.id}") },
+                                                    ),
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        if (playlists.isNotEmpty()) {
+                            item(key = "section_playlists_${section.title}") {
+                                LazyRow(
+                                    contentPadding =
+                                        WindowInsets.systemBars
+                                            .only(WindowInsetsSides.Horizontal)
+                                            .asPaddingValues(),
+                                    modifier = Modifier.animateItem(),
+                                ) {
+                                    items(playlists, key = { "charts_playlist_${it.id}" }) { playlist ->
+                                        YouTubeGridItem(
+                                            item = playlist,
+                                            isActive = false,
+                                            isPlaying = false,
+                                            coroutineScope = coroutineScope,
+                                            modifier =
+                                                Modifier
+                                                    .combinedClickable(
+                                                        onClick = { navController.navigate("online_playlist/${playlist.id}") },
                                                     ),
                                         )
                                     }
