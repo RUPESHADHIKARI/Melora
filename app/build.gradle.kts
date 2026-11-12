@@ -40,8 +40,8 @@ android {
         applicationId = applicationIdOverride ?: baseApplicationId
         minSdk = 26
         targetSdk = 36
-        versionCode = 155
-        versionName = "1.0.2"
+        versionCode = 156
+        versionName = "1.0.3"
         val baseVersionName = requireNotNull(versionName)
         buildConfigField("String", "BASE_VERSION_NAME", "\"$baseVersionName\"")
         buildCommit?.let { versionName = "$baseVersionName+$it" }
@@ -72,7 +72,7 @@ android {
         buildConfigField("String", "UPDATE_REPO", "\"$updateRepo\"")
 
         // Test hook only: higher versionCode for E2E update drills.
-        // Shipped builds keep versionCode = 155 (no automated bump).
+        // Shipped builds keep versionCode = 156 (no automated bump).
         System.getenv("MELORA_TEST_VERSION_CODE")?.toIntOrNull()?.let { versionCode = it }
     }
 
