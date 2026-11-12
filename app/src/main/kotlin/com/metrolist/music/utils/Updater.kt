@@ -6,52 +6,138 @@
 package com.metrolist.music.utils
 
 import com.metrolist.music.BuildConfig
+import com.metrolist.music.updater.GitHubRelease
+import com.metrolist.music.updater.GitHubAsset
+import com.metrolist.music.updater.UpdateFailureReasons
+import com.metrolist.music.updater.UpdateInfo
+import com.metrolist.music.updater.UpdateManifest
+import io.ktor.client.plugins.ClientRequestException
 import io.ktor.client.HttpClient
+import io.ktor.client.network.sockets.ConnectTimeoutException
+import io.ktor.client.network.sockets.SocketTimeoutException
+import io.ktor.client.plugins.HttpRequestTimeoutException
+import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.plugins.UserAgent
 import io.ktor.client.request.get
+import io.ktor.client.request.header
 import io.ktor.client.statement.bodyAsText
+import com.metrolist.music.updater.UpdateDownloader
+import java.io.IOException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.json.JSONArray
-import org.json.JSONObject
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.json.Json
 
+/**
+ * MELORA updater — GitHub Releases as the update source.
+ *
+ * Security model:
+ *  - All metadata comes from api.github.com over HTTPS.
+ *  - The *trusted* source for the APK URL, versionCode and SHA-256 checksum is
+ *    the `latest.json` manifest attached to the latest release. Without a
+ *    valid manifest no update is offered and no APK is ever installed.
+ *  - Version decisions use versionCode comparison only; a build newer than
+ *    the manifest is never offered a downgrade.
+ *
+ * `checkForUpdate` is cached in memory per process; the ViewModel additionally
+ * persists the manifest in DataStore so app restarts within 24 h do not touch
+ * GitHub at all.
+ *
+ * Note: [compareVersions] is retained only for the changelog sheet (ordering
+ * past releases). Update decisions never rely on it.
+ */
 data class ReleaseInfo(
     val tagName: String,
     val versionName: String,
     val description: String,
     val releaseDate: String,
-    val assets: List<ReleaseAsset>
+    val assets: List<ReleaseAsset>,
 )
 
 data class ReleaseAsset(
     val name: String,
     val downloadUrl: String,
     val size: Long,
-    val architecture: String,
-    val variant: String // "foss" or "gms"
 )
 
 object Updater {
-    private val client = HttpClient()
-    var lastCheckTime = -1L
-        private set
-    
-    private var cachedReleaseInfo: ReleaseInfo? = null
-    private var cachedAllReleases: List<ReleaseInfo> = emptyList()
-    
-    private const val CHECK_INTERVAL_MILLIS = 2 * 60 * 60 * 1000L // 2 hours
-    private const val GITHUB_API_BASE = "https://api.github.com/repos/MetrolistGroup/Metrolist"
-    private const val KMP_LATEST_RELEASE_URL = "https://api.github.com/repos/MetrolistGroup/Metrolist-KMP/releases/latest"
-    private const val KMP_APK_NAME = "Metrolist.apk"
+    private val checkClient =
+        HttpClient {
+            expectSuccess = true
+            install(HttpTimeout) {
+                requestTimeoutMillis = 15_000
+                connectTimeoutMillis = 10_000
+                socketTimeoutMillis = 15_000
+            }
+            install(UserAgent) { agent = "Melora-Updater/${BuildConfig.VERSION_NAME}" }
+        }
+
+    val json =
+        Json {
+            ignoreUnknownKeys = true
+            isLenient = true
+            encodeDefaults = false
+        }
+
+    val githubApiBase = "https://api.github.com/repos/${BuildConfig.UPDATE_REPO}"
+
+    const val CHECK_INTERVAL_MILLIS = 24L * 60 * 60 * 1000
+    const val MANIFEST_ASSET_NAME = "latest.json"
+
+    /** last successful network check within this process. */
+    internal var cachedInfo: UpdateInfo? = null
 
     /**
-     * Compares two version strings.
-     * Returns: 1 if v1 > v2, -1 if v1 < v2, 0 if equal
+     * Update decision, **versionCode based**: resolves the trusted
+     * [UpdateManifest] and reports `hasUpdate = versionCode > installed`.
+     * An installed build that already matches the manifest yields
+     * `hasUpdate = false` (never a downgrade or a re-download).
+     */
+    suspend fun checkForUpdate(forceRefresh: Boolean = false): Result<Pair<UpdateInfo, Boolean>> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                cachedInfo?.takeIf { !forceRefresh }?.let { cached ->
+                    return@runCatching cached to hasUpdate(cached)
+                }
+                val info = fetchUpdateInfo()
+                cachedInfo = info
+                info to hasUpdate(info)
+            }
+        }
+
+    fun hasUpdate(info: UpdateInfo): Boolean = info.manifest.versionCode > BuildConfig.VERSION_CODE
+
+    /** Latest MELORA release (raw listing used by the changelog sheet). */
+    suspend fun getLatestRelease(): Result<ReleaseInfo> =
+        withContext(Dispatchers.IO) {
+            runCatching { newReleaseInfo(fetchLatestRelease()) }
+        }
+
+    /** All releases (oldest pages appended last) for the changelog sheet. */
+    suspend fun getAllReleases(): Result<List<ReleaseInfo>> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val releases = mutableListOf<ReleaseInfo>()
+                var page = 1
+                while (page <= 5) {
+                    val body = checkClient.get("$githubApiBase/releases?per_page=30&page=$page").bodyAsText()
+                    val parsed = json.decodeFromString<List<GitHubRelease>>(body)
+                    parsed.forEach { releases.add(newReleaseInfo(it)) }
+                    if (parsed.size < 30) break
+                    page++
+                }
+                releases
+            }
+        }
+
+    /**
+     * Changelog-only helper retained for ordering *past* releases in the
+     * changelog sheet. Never used for update decisions.
      */
     fun compareVersions(v1: String, v2: String): Int {
         val v1Parts = v1.removePrefix("v").split(".").map { it.toIntOrNull() ?: 0 }
         val v2Parts = v2.removePrefix("v").split(".").map { it.toIntOrNull() ?: 0 }
         val maxLength = maxOf(v1Parts.size, v2Parts.size)
-        
         for (i in 0 until maxLength) {
             val part1 = v1Parts.getOrNull(i) ?: 0
             val part2 = v2Parts.getOrNull(i) ?: 0
@@ -63,203 +149,116 @@ object Updater {
         return 0
     }
 
-    /**
-     * Checks if the latest version is newer than the current version.
-     * Returns true if an update is available (latestVersion > currentVersion)
-     */
-    fun isUpdateAvailable(currentVersion: String, latestVersion: String): Boolean {
-        return compareVersions(latestVersion, currentVersion) > 0
-    }
+    private fun newReleaseInfo(release: GitHubRelease): ReleaseInfo =
+        ReleaseInfo(
+            tagName = release.tagName,
+            versionName = release.name ?: release.tagName.removePrefix("v"),
+            description = release.body.orEmpty(),
+            releaseDate = release.publishedAt ?: "",
+            assets =
+                release.assets
+                    .filter { it.name.endsWith(".apk") }
+                    .map { ReleaseAsset(it.name, it.browserDownloadUrl, it.size) },
+        )
 
-    /**
-     * Get the current app's architecture and variant
-     */
-    private fun getCurrentAppVariant(): Pair<String, String> {
-        val architecture = BuildConfig.ARCHITECTURE
-        val variant = if (BuildConfig.CAST_AVAILABLE) "gms" else "foss"
-        return architecture to variant
-    }
-
-    /**
-     * Parse release assets from GitHub API response
-     */
-    private fun parseAssets(assetsArray: JSONArray): List<ReleaseAsset> {
-        val assets = mutableListOf<ReleaseAsset>()
-        
-        for (i in 0 until assetsArray.length()) {
-            val asset = assetsArray.getJSONObject(i)
-            val name = asset.getString("name")
-            
-            // Skip non-APK files
-            if (!name.endsWith(".apk")) continue
-            
-            val downloadUrl = asset.getString("browser_download_url")
-            val size = asset.getLong("size")
-            
-            // Parse architecture and variant from filename
-            val (arch, variant) = when {
-                name == "Metrolist.apk" -> "universal" to "foss"
-                name == "Metrolist-with-Google-Cast.apk" -> "universal" to "gms"
-                name.startsWith("app-") && name.endsWith("-release.apk") -> {
-                    val arch = name.removePrefix("app-").removeSuffix("-release.apk")
-                    arch to "foss"
-                }
-                name.startsWith("app-") && name.endsWith("-with-Google-Cast.apk") -> {
-                    val arch = name.removePrefix("app-").removeSuffix("-with-Google-Cast.apk")
-                    arch to "gms"
-                }
-                else -> null to null
-            }
-            
-            if (arch != null && variant != null) {
-                assets.add(ReleaseAsset(name, downloadUrl, size, arch, variant))
-            }
+    private suspend fun fetchLatestRelease(): GitHubRelease {
+        val response = checkClient.get("$githubApiBase/releases/latest") {
+            header("Accept", "application/vnd.github+json")
         }
-        
-        return assets
+        return json.decodeFromString<GitHubRelease>(response.bodyAsText())
     }
 
-    /**
-     * Fetch latest release from GitHub API
-     */
-    suspend fun getLatestRelease(forceRefresh: Boolean = false): Result<ReleaseInfo> =
-        withContext(Dispatchers.IO) {
-            runCatching {
-                // Return cached if available and not forcing refresh
-                if (cachedReleaseInfo != null && !forceRefresh) {
-                    return@runCatching cachedReleaseInfo!!
-                }
-                
-                val response = client.get("$GITHUB_API_BASE/releases/latest")
-                    .bodyAsText()
-                val json = JSONObject(response)
-                
-                val releaseInfo = ReleaseInfo(
-                    tagName = json.getString("tag_name"),
-                    versionName = json.getString("name"),
-                    description = json.getString("body"),
-                    releaseDate = json.getString("published_at"),
-                    assets = parseAssets(json.getJSONArray("assets"))
+    /** Fresh network check → trusted [UpdateInfo]. Throws [UpdateException] with a stable reason. */
+    internal suspend fun fetchUpdateInfo(): UpdateInfo {
+        val release = fetchLatestRelease()
+
+        val manifestAsset =
+            release.assets.firstOrNull { it.name.equals(MANIFEST_ASSET_NAME, ignoreCase = true) }
+                ?: throw UpdateException(
+                    UpdateFailureReasons.MANIFEST_UNAVAILABLE,
+                    "No $MANIFEST_ASSET_NAME manifest attached to the latest release",
                 )
-                
-                cachedReleaseInfo = releaseInfo
-                lastCheckTime = System.currentTimeMillis()
-                releaseInfo
+
+        val manifestText = checkClient.get(manifestAsset.browserDownloadUrl).bodyAsText()
+        val manifest =
+            try {
+                json.decodeFromString<UpdateManifest>(manifestText)
+            } catch (e: SerializationException) {
+                throw UpdateException(UpdateFailureReasons.MANIFEST_UNAVAILABLE, "Malformed release manifest", e)
             }
-        }
 
-    /**
-     * Fetch all releases from GitHub API (paginated)
-     */
-    suspend fun getAllReleases(forceRefresh: Boolean = false): Result<List<ReleaseInfo>> =
-        withContext(Dispatchers.IO) {
-            runCatching {
-                if (cachedAllReleases.isNotEmpty() && !forceRefresh) {
-                    return@runCatching cachedAllReleases
-                }
-                
-                val releases = mutableListOf<ReleaseInfo>()
-                var page = 1
-                var hasMore = true
-                
-                while (hasMore && page <= 10) { // Limit to 10 pages
-                    val response = client.get("$GITHUB_API_BASE/releases?page=$page&per_page=30")
-                        .bodyAsText()
-                    val json = JSONArray(response)
-                    
-                    if (json.length() == 0) {
-                        hasMore = false
-                        break
-                    }
-                    
-                    for (i in 0 until json.length()) {
-                        val releaseObj = json.getJSONObject(i)
-                        releases.add(ReleaseInfo(
-                            tagName = releaseObj.getString("tag_name"),
-                            versionName = releaseObj.getString("name"),
-                            description = releaseObj.getString("body"),
-                            releaseDate = releaseObj.getString("published_at"),
-                            assets = parseAssets(releaseObj.getJSONArray("assets"))
-                        ))
-                    }
-                    
-                    page++
-                }
-                
-                cachedAllReleases = releases
-                releases
-            }
-        }
+        validateManifest(manifest, release)
 
-    internal fun parseKmpRelease(response: String): ReleaseInfo? {
-        val release = JSONObject(response)
-        val assets = parseAssets(release.getJSONArray("assets")).filter { it.name == KMP_APK_NAME }
-        val tagName = release.getString("tag_name")
+        val apkAsset = release.assets.firstOrNull { it.browserDownloadUrl == manifest.apkUrl }
 
-        return ReleaseInfo(
-            tagName = tagName,
-            versionName = tagName.removePrefix("v"),
-            description = release.optString("body").takeUnless { release.isNull("body") }.orEmpty(),
-            releaseDate = release.getString("published_at"),
-            assets = assets,
-        ).takeIf { assets.isNotEmpty() }
+        return UpdateInfo(
+            manifest = manifest,
+            releaseTitle = release.name ?: release.tagName,
+            publishedAt = release.publishedAt,
+            releaseBody = release.body,
+            tag = release.tagName,
+            apkSizeBytes = apkAsset?.size ?: -1L,
+        )
     }
 
     /**
-     * Returns the latest stable KMP release when it includes an Android APK.
+     * Guardrails on the manifest: APK must be a GitHub release asset of this
+     * repository (never a foreign host), checksum must be a full 64-hex
+     * SHA-256. A manifest whose versionCode is not newer than the installed
+     * build simply yields `hasUpdate = false`; it is never an error.
      */
-    suspend fun getLatestKmpRelease(): Result<ReleaseInfo?> =
-        withContext(Dispatchers.IO) {
-            runCatching {
-                parseKmpRelease(client.get(KMP_LATEST_RELEASE_URL).bodyAsText())
-            }
+    private fun validateManifest(manifest: UpdateManifest, release: GitHubRelease) {
+        if (manifest.versionCode <= 0L) {
+            throw UpdateException(UpdateFailureReasons.MANIFEST_UNAVAILABLE, "Manifest has no valid versionCode")
         }
 
-    /**
-     * Get the download URL for the correct app variant
-     */
-    fun getDownloadUrlForCurrentVariant(releaseInfo: ReleaseInfo): String? {
-        val (currentArch, currentVariant) = getCurrentAppVariant()
-        
-        return releaseInfo.assets
-            .find { it.architecture == currentArch && it.variant == currentVariant }
-            ?.downloadUrl
+        val apkUri =
+            runCatching { java.net.URI(manifest.apkUrl) }
+                .getOrNull()
+                ?: throw UpdateException(UpdateFailureReasons.MANIFEST_UNAVAILABLE, "Manifest has no valid apkUrl")
+
+        val hostOk = apkUri.host == "github.com"
+        val pathOk = apkUri.path.orEmpty().contains("/releases/download/")
+        if (!hostOk || !pathOk) {
+            throw UpdateException(UpdateFailureReasons.MANIFEST_UNAVAILABLE, "APK URL is outside the trusted GitHub release host")
+        }
+
+        if (!manifest.sha256.matches(Regex("^[0-9a-fA-F]{64}$"))) {
+            throw UpdateException(UpdateFailureReasons.MANIFEST_UNAVAILABLE, "Manifest has an invalid SHA-256 checksum")
+        }
+
+        if (release.assets.none { it.browserDownloadUrl == manifest.apkUrl }) {
+            throw UpdateException(UpdateFailureReasons.MANIFEST_UNAVAILABLE, "Manifest apkUrl does not match any release asset")
+        }
     }
+}
 
-    /**
-     * Check if update is needed (respects 2-hour cache)
-     */
-    suspend fun checkForUpdate(forceRefresh: Boolean = false): Result<Pair<ReleaseInfo?, Boolean>> =
-        withContext(Dispatchers.IO) {
-            runCatching {
-                // Check if we should fetch (2 hour interval)
-                val shouldFetch = forceRefresh || 
-                    (System.currentTimeMillis() - lastCheckTime) > CHECK_INTERVAL_MILLIS
-                
-                if (!shouldFetch && cachedReleaseInfo != null) {
-                    val hasUpdate = isUpdateAvailable(
-                        BuildConfig.BASE_VERSION_NAME,
-                        cachedReleaseInfo!!.versionName
-                    )
-                    return@runCatching cachedReleaseInfo!! to hasUpdate
-                }
-                
-                val result = getLatestRelease(forceRefresh = true)
-                if (result.isSuccess) {
-                    val releaseInfo = result.getOrThrow()
-                    val hasUpdate = isUpdateAvailable(
-                        BuildConfig.BASE_VERSION_NAME,
-                        releaseInfo.versionName
-                    )
-                    releaseInfo to hasUpdate
-                } else {
-                    throw result.exceptionOrNull() ?: Exception("Unknown error")
-                }
+/** Wraps a check failure with a stable, UI-mappable reason code. */
+class UpdateException(
+    val reason: String,
+    message: String,
+    cause: Throwable? = null,
+) : Exception(message, cause)
+
+/** Maps exceptions from this module to stable failure codes for the UI. */
+internal fun Throwable.toUpdateFailureReason(): String {
+    var e: Throwable = this
+    while (e.cause != null && e.cause != e) e = e.cause!!
+    return when (e) {
+        is UpdateException -> e.reason
+        is UpdateDownloader.DownloadException -> e.reason
+        is UpdateDownloader.DownloadCancelled -> UpdateFailureReasons.DOWNLOAD
+        is ClientRequestException -> {
+            when (e.response.status.value) {
+                403 -> UpdateFailureReasons.RATE_LIMIT
+                404 -> UpdateFailureReasons.MANIFEST_UNAVAILABLE
+                else -> UpdateFailureReasons.HTTP
             }
         }
-
-    /**
-     * Get the latest release info (cached)
-     */
-    fun getCachedLatestRelease(): ReleaseInfo? = cachedReleaseInfo
+        is HttpRequestTimeoutException -> UpdateFailureReasons.NETWORK_TIMEOUT
+        is ConnectTimeoutException -> UpdateFailureReasons.NETWORK_TIMEOUT
+        is SocketTimeoutException -> UpdateFailureReasons.NETWORK_TIMEOUT
+        is IOException -> UpdateFailureReasons.OFFLINE
+        else -> UpdateFailureReasons.MARSHAL_FAILURE
+    }
 }

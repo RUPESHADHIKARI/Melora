@@ -35,9 +35,7 @@ import com.metrolist.music.R
 import com.metrolist.music.ui.component.IconButton
 import com.metrolist.music.ui.component.Material3SettingsGroup
 import com.metrolist.music.ui.component.Material3SettingsItem
-import com.metrolist.music.ui.component.ReleaseNotesCard
 import com.metrolist.music.ui.utils.backToMain
-import com.metrolist.music.utils.Updater
 import androidx.compose.runtime.remember
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -213,7 +211,7 @@ fun SettingsScreen(
                     add(
                         Material3SettingsItem(
                             icon = painterResource(R.drawable.update),
-                            title = { Text(stringResource(R.string.updater)) },
+                            title = { Text(stringResource(R.string.update_center)) },
                             onClick = { navController.navigate("settings/updater") }
                         )
                     )
@@ -234,37 +232,28 @@ fun SettingsScreen(
                     )
                 )
                 if (BuildConfig.UPDATER_AVAILABLE && latestVersionName != BuildConfig.BASE_VERSION_NAME) {
-                    val releaseInfo = Updater.getCachedLatestRelease()
-                    val downloadUrl = releaseInfo?.let { Updater.getDownloadUrlForCurrentVariant(it) }
-
-                    if (downloadUrl != null) {
-                        add(
-                            Material3SettingsItem(
-                                icon = painterResource(R.drawable.update),
-                                title = { 
-                                    Text(
-                                        text = stringResource(R.string.new_version_available),
-                                    )
-                                },
-                                description = {
-                                    Text(
-                                        text = latestVersionName,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                },
-                                showBadge = true,
-                                onClick = { uriHandler.openUri(downloadUrl) }
-                            )
+                    add(
+                        Material3SettingsItem(
+                            icon = painterResource(R.drawable.update),
+                            title = {
+                                Text(
+                                    text = stringResource(R.string.new_version_available),
+                                )
+                            },
+                            description = {
+                                Text(
+                                    text = latestVersionName,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            },
+                            showBadge = true,
+                            onClick = { navController.navigate("settings/updater") }
                         )
-                    }
+                    )
                 }
             }
         )
-    if (BuildConfig.UPDATER_AVAILABLE && latestVersionName != BuildConfig.BASE_VERSION_NAME) {
-            Spacer(modifier = Modifier.height(16.dp))
-            ReleaseNotesCard()
-        }
 
         Spacer(modifier = Modifier.height(16.dp))
     }

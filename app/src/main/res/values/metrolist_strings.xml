@@ -275,7 +275,7 @@
     <string name="release_notes">Release notes</string>
     <string name="changelog">Changelog</string>
     <string name="changelog_empty">No changelogs available</string>
-    <string name="github_releases_url">https://github.com/MetrolistGroup/Metrolist/releases</string>
+    <string name="github_releases_url">https://github.com/RUPESHADHIKARI/Melora/releases</string>
     <string name="list_bullet">•</string>
     <string name="view_on_github">View on GitHub</string>
     <string name="current_version">Current version</string>
@@ -404,10 +404,70 @@
     <string name="update_action">Update</string>
     <string name="update_channel_name">App updates</string>
     <string name="update_channel_desc">Notifications about new app versions</string>
-    <string name="kmp_upgrade_title">Melora KMP %s is available</string>
-    <string name="kmp_upgrade_warning">Melora KMP is still in development. You may encounter bugs or incomplete features.</string>
-    <string name="kmp_upgrade_action">Try KMP</string>
-    <string name="kmp_upgrade_later">Not now</string>
+    <!-- Update Center (in-app GitHub Releases updater) -->
+    <string name="update_center">Update Center</string>
+    <string name="update_center_desc">Keep MELORA current — download and install updates right from inside the app</string>
+
+    <string name="uc_status_idle">Not checked yet today</string>
+    <string name="uc_status_up_to_date">You\'re using the latest version</string>
+    <string name="uc_status_available">A new update is available</string>
+    <string name="uc_status_checking">Checking for updates…</string>
+    <string name="uc_status_downloading">Downloading update…</string>
+    <string name="uc_status_verifying">Verifying update…</string>
+    <string name="uc_status_ready">Ready to install</string>
+    <string name="uc_status_installing">Installing update…</string>
+    <string name="uc_status_install_permission">Allow MELORA to install updates first</string>
+    <string name="uc_status_failed">Update failed. Try again.</string>
+
+    <string name="uc_last_checked">Last checked: %s</string>
+    <string name="uc_never_checked">Not checked yet</string>
+    <string name="uc_current_version">Current version</string>
+    <string name="uc_latest_version">Latest version</string>
+    <string name="uc_whats_new">What\'s New</string>
+    <string name="uc_release_date">Released %s</string>
+    <string name="uc_size">Download size: %s</string>
+    <string name="uc_downloaded_of">%1$s of %2$s</string>
+
+    <string name="uc_check_now">Check for Updates</string>
+    <string name="uc_download_update">Download Update</string>
+    <string name="uc_install_update">Install Update</string>
+    <string name="uc_retry">Retry</string>
+    <string name="uc_cancel">Cancel download</string>
+    <string name="uc_open_settings">Open Settings</string>
+    <string name="uc_verified_note">Verified against the release manifest — checksum, signature, package and version all match</string>
+    <string name="uc_data_note">Your playlists, downloads and settings are preserved when updating</string>
+
+    <!-- Install-permission coaching (official system installer) -->
+    <string name="install_unknown_needed_title">Allow installing updates</string>
+    <string name="install_unknown_needed_desc">Android requires your explicit permission before any app may install an update. MELORA hands the verified update to the official Android installer — nothing is installed silently.</string>
+    <string name="install_unknown_grant">Allow &amp; install</string>
+
+    <!-- Update dialog -->
+    <string name="update_dialog_title">A New MELORA Update Is Available!</string>
+    <string name="update_dialog_from_to">From %1$s to %2$s</string>
+    <string name="upd_update_now">Update Now</string>
+    <string name="upd_remind_later">Remind Me Later</string>
+    <string name="upd_downloading">Downloading… %1$s</string>
+    <string name="upd_verifying">Verifying update…</string>
+    <string name="upd_ready">Ready to install</string>
+    <string name="upd_install">Install</string>
+
+    <!-- Update failure reasons -->
+    <string name="uc_err_offline">No internet connection. MELORA will check again later.</string>
+    <string name="uc_err_rate_limit">GitHub is rate-limiting update checks. Try again later.</string>
+    <string name="uc_err_manifest_unavailable">The release manifest is missing or unreadable.</string>
+    <string name="uc_err_timeout">The update server took too long to respond.</string>
+    <string name="uc_err_http">GitHub returned an error.</string>
+    <string name="uc_err_marshal">Unexpected response from GitHub.</string>
+    <string name="uc_err_download">Download failed. Check your connection and retry.</string>
+    <string name="uc_err_storage">Not enough storage for the update. Free some space and retry.</string>
+    <string name="uc_err_verify_checksum">The downloaded file did not match its expected checksum — nothing was installed.</string>
+    <string name="uc_err_verify_package">The downloaded package targets a different app — nothing was installed.</string>
+    <string name="uc_err_verify_version">The downloaded package has an unexpected version — nothing was installed.</string>
+    <string name="uc_err_verify_signature">The downloaded package was not signed with the MELORA key — nothing was installed.</string>
+    <string name="uc_err_verify_apk_not_found">The downloaded update is missing. Download it again.</string>
+    <string name="uc_err_generic">Update failed. Try again.</string>
+    <string name="uc_close">Close</string>
 
     <!-- Offload -->
     <string name="audio_offload">Enable audio offload</string>
@@ -923,7 +983,31 @@
     <string name="metrolist">METROLIST</string>
     <string name="wanna_play_favorite_song">Want to play their favorite song?</string>
     <string name="yeah">Yeah!</string>
-    <string name="stands_with_palestine">This project stands with Palestine 🇵🇸</string>
+    <string name="stands_with_nepal">This project stands with Nepal 🇳🇵</string>
+
+    <!-- About MELORA -->
+    <string name="melora">MELORA</string>
+    <string name="melora_tagline">Where Music Comes Alive.</string>
+    <string name="designed_developed_by">Designed and Developed by</string>
+    <string name="credits_creator">Creator &amp; Developer</string>
+    <string name="open_update_center">Open Update Center</string>
+    <string name="community_and_support">Community &amp; Support</string>
+    <string name="community_discord_desc">Join the community chat</string>
+    <string name="community_telegram_desc">News and announcements</string>
+    <string name="community_repo_desc">MELORA\'s source code on GitHub</string>
+    <string name="report_issue">Report an issue</string>
+    <string name="report_issue_desc">Found a bug or have an idea?</string>
+    <string name="open_source_licenses">Open Source &amp; Licenses</string>
+    <string name="based_on_metrolist">Based on Metrolist</string>
+    <string name="based_on_metrolist_desc">MELORA is built on the open-source Metrolist project</string>
+    <string name="metrolist_contributors">Metrolist contributors</string>
+    <string name="gpl_notice">This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 3 of the License.</string>
+    <string name="gpl_copyright">Copyright © 2026 Rupesh Adhikari and MELORA contributors. Based on Metrolist © 2026 the Metrolist Project and its contributors.</string>
+    <string name="third_party_note">Built with Kotlin, Jetpack Compose &amp; Material 3, Coil, Media3, Room, Hilt, Ktor, OkHttp and other great open-source libraries.</string>
+    <string name="footer_thanks">Thank you for being part of our journey.</string>
+    <string name="cd_website">Website</string>
+    <string name="cd_github_profile">GitHub profile</string>
+    <string name="cd_instagram_profile">Instagram profile</string>
 
     <!-- Podcasts -->
     <string name="filter_podcasts">Podcasts</string>

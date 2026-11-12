@@ -62,23 +62,35 @@ android {
         buildConfigField("String", "LASTFM_SECRET", "\"$lastFmSecret\"")
         buildConfigField("String", "ARCHITECTURE", "\"universal\"")
         buildConfigField("Long", "DISCORD_APP_ID", "1447278780795064401L")
+
+        // GitHub repository the in-app updater polls for releases
+        // (latest release + latest.json manifest). Override for test repos.
+        val updateRepo =
+            System.getenv("MELORA_UPDATE_REPO")
+                ?.takeIf { it.isNotBlank() }
+                ?: "RUPESHADHIKARI/Melora"
+        buildConfigField("String", "UPDATE_REPO", "\"$updateRepo\"")
+
+        // Test hook only: higher versionCode for E2E update drills.
+        // Shipped builds keep versionCode = 155 (no automated bump).
+        System.getenv("MELORA_TEST_VERSION_CODE")?.toIntOrNull()?.let { versionCode = it }
     }
 
     flavorDimensions += listOf("variant")
     productFlavors {
-        // FOSS - no gcast; in-app updater disabled for MELORA (no release channel yet)
+        // FOSS - no gcast; ships the GitHub Releases updater
         create("foss") {
             dimension = "variant"
             isDefault = true
             buildConfigField("Boolean", "CAST_AVAILABLE", "false")
-            buildConfigField("Boolean", "UPDATER_AVAILABLE", "false")
+            buildConfigField("Boolean", "UPDATER_AVAILABLE", "true")
         }
 
         // GMS - no gcast distinction needed for MELORA; cast remains
         create("gms") {
             dimension = "variant"
             buildConfigField("Boolean", "CAST_AVAILABLE", "true")
-            buildConfigField("Boolean", "UPDATER_AVAILABLE", "false")
+            buildConfigField("Boolean", "UPDATER_AVAILABLE", "true")
         }
 
         // IzzyOnDroid - no gcast, no updater - the ONLY F-droid compliant build

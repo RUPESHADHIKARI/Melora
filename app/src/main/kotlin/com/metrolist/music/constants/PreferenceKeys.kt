@@ -107,6 +107,11 @@ val DismissedStandaloneUpdateKey = stringPreferencesKey("dismissedStandaloneUpda
 val DismissedKmpUpdateKey = stringPreferencesKey("dismissedKmpUpdate")
 val UpdateNotificationsEnabledKey = booleanPreferencesKey("updateNotifications")
 
+// In-app GitHub Releases updater (Update Center) state.
+val UpdateLastCheckedKey = longPreferencesKey("updateLastCheckedAt")
+val UpdateCachedManifestKey = stringPreferencesKey("updateCachedManifest")
+val UpdateVerifiedApkKey = stringPreferencesKey("updateVerifiedApk")
+
 val AudioQualityKey = stringPreferencesKey("audioQuality")
 
 enum class AudioQuality {

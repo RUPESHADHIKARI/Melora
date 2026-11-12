@@ -22,6 +22,8 @@ import android.widget.Toast
 import androidx.fragment.app.FragmentActivity
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
@@ -140,7 +142,6 @@ import com.metrolist.music.constants.AppLanguageKey
 import com.metrolist.music.constants.CheckForUpdatesKey
 import com.metrolist.music.constants.DarkModeKey
 import com.metrolist.music.constants.DefaultOpenTabKey
-import com.metrolist.music.constants.DismissedKmpUpdateKey
 import com.metrolist.music.constants.DismissedStandaloneUpdateKey
 import com.metrolist.music.constants.DensityScaleKey
 import com.metrolist.music.constants.DisableScreenshotKey
@@ -209,11 +210,12 @@ import com.metrolist.music.ui.theme.MeloraTheme
 import com.metrolist.music.ui.theme.extractThemeColor
 import com.metrolist.music.ui.utils.appBarScrollBehavior
 import com.metrolist.music.ui.utils.resetHeightOffset
-import com.metrolist.music.utils.ReleaseInfo
 import com.metrolist.music.utils.SearchRoutes
 import com.metrolist.music.utils.SyncUtils
 import com.metrolist.music.utils.ArtistNameAliases
-import com.metrolist.music.utils.Updater
+import com.metrolist.music.updater.AppUpdateViewModel
+import com.metrolist.music.updater.UpdateStatus
+import com.metrolist.music.ui.component.MeloraUpdateDialog
 import com.metrolist.music.utils.dataStore
 import com.metrolist.music.utils.safeDataStoreEdit
 import com.metrolist.music.utils.get
@@ -235,14 +237,6 @@ import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.util.Locale
 import javax.inject.Inject
-
-private data class AvailableUpdate(
-    val release: ReleaseInfo,
-    val downloadUrl: String,
-    val isKmp: Boolean,
-) {
-    val dismissalKey = if (isKmp) DismissedKmpUpdateKey else DismissedStandaloneUpdateKey
-}
 
 @Suppress("DEPRECATION", "ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
 @AndroidEntryPoint
@@ -332,6 +326,38 @@ class MainActivity : FragmentActivity() {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
                 ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1000)
             }
+        }
+    }
+
+    /**
+     * Quiet heads-up that a new MELORA release is out. Tapping it opens the
+     * repo's releases page; the full in-app flow stays in the Update Center
+     * and the update dialog. Never posted for "Remind me later" releases.
+     */
+    private fun postUpdateNotification(versionName: String) {
+        val intent =
+            Intent(
+                Intent.ACTION_VIEW,
+                "https://github.com/${BuildConfig.UPDATE_REPO}/releases/latest".toUri(),
+            )
+        val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        val pending = PendingIntent.getActivity(this, 1001, intent, flags)
+
+        val notification =
+            NotificationCompat
+                .Builder(this, "updates")
+                .setSmallIcon(R.drawable.update)
+                .setContentTitle(getString(R.string.update_available_title))
+                .setContentText(getString(R.string.update_available_message, versionName))
+                .setContentIntent(pending)
+                .setAutoCancel(true)
+                .build()
+
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            NotificationManagerCompat.from(this).notify(1001, notification)
         }
     }
 
@@ -524,78 +550,56 @@ class MainActivity : FragmentActivity() {
         skipSplash: Boolean,
         onComposeReady: () -> Unit,
     ) {
+        // ── In-app updates (GitHub Releases) ─────────────────────────────
+        // One shared AppUpdateViewModel drives the update dialog, the Update
+        // Center screen and the version badges, so every surface shows the
+        // same lifecycle state at the same time.
+        val appUpdateViewModel: AppUpdateViewModel = hiltViewModel()
+        val updateStatus by appUpdateViewModel.status.collectAsStateWithLifecycle()
         val checkForUpdates by rememberPreference(CheckForUpdatesKey, defaultValue = true)
-        var availableUpdate by remember { mutableStateOf<AvailableUpdate?>(null) }
 
         if (BuildConfig.UPDATER_AVAILABLE) {
             LaunchedEffect(checkForUpdates) {
-                if (checkForUpdates) {
+                appUpdateViewModel.startupCheck(autoEnabled = checkForUpdates)
+            }
+
+            // The badge condition (latestVersionName != BASE_VERSION_NAME)
+            // reacts to the updater state; after an install the same state
+            // collapses back to the base version and the badge disappears.
+            val nextBadgeVersion =
+                when (val state = updateStatus) {
+                    is UpdateStatus.Available -> state.info.manifest.versionName
+                    is UpdateStatus.ReadyToInstall -> state.info.manifest.versionName
+                    else -> BuildConfig.BASE_VERSION_NAME
+                }
+            if (latestVersionName != nextBadgeVersion) {
+                onLatestVersionNameChange(nextBadgeVersion)
+            }
+
+            // Optional heads-up notification for undismissed updates.
+            LaunchedEffect(updateStatus) {
+                val current = updateStatus
+                if (current is UpdateStatus.Available) {
                     val preferences = dataStore.data.first()
                     val notificationsEnabled = preferences[UpdateNotificationsEnabledKey] ?: true
-                    val (releaseInfo, hasUpdate) = Updater.checkForUpdate().getOrNull() ?: (null to false)
-                    releaseInfo?.let { onLatestVersionNameChange(it.versionName) }
-
-                    val standaloneUpdate =
-                        releaseInfo
-                            ?.takeIf { hasUpdate }
-                            ?.let { release ->
-                                Updater.getDownloadUrlForCurrentVariant(release)?.let { downloadUrl ->
-                                    AvailableUpdate(release, downloadUrl, isKmp = false)
-                                }
-                            }
-                    val kmpUpdate =
-                        Updater.getLatestKmpRelease().getOrNull()?.let { release ->
-                            release.assets.firstOrNull()?.let { asset ->
-                                AvailableUpdate(release, asset.downloadUrl, isKmp = true)
-                            }
-                        }
-                    val update = kmpUpdate ?: standaloneUpdate
-                    availableUpdate = update?.takeUnless {
-                        it.release.tagName == preferences[it.dismissalKey]
+                    val dismissedTag = preferences[DismissedStandaloneUpdateKey]
+                    if (notificationsEnabled && current.info.tag != dismissedTag) {
+                        postUpdateNotification(current.info.manifest.versionName)
                     }
-
-                    if (update != null && notificationsEnabled) {
-                        val intent = Intent(Intent.ACTION_VIEW, update.downloadUrl.toUri())
-                        val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                        val pending = PendingIntent.getActivity(this@MainActivity, 1001, intent, flags)
-                        val notificationText =
-                            if (update.isKmp) {
-                                getString(R.string.kmp_upgrade_warning)
-                            } else {
-                                update.release.versionName
-                            }
-                        val notification =
-                            NotificationCompat
-                                .Builder(this@MainActivity, "updates")
-                                .setSmallIcon(R.drawable.update)
-                                .setContentTitle(
-                                    if (update.isKmp) {
-                                        getString(R.string.kmp_upgrade_title, update.release.versionName)
-                                    } else {
-                                        getString(R.string.update_available_title)
-                                    },
-                                )
-                                .setContentText(notificationText)
-                                .apply {
-                                    if (update.isKmp) {
-                                        setStyle(NotificationCompat.BigTextStyle().bigText(notificationText))
-                                    }
-                                }
-                                .setContentIntent(pending)
-                                .setAutoCancel(true)
-                                .build()
-
-                        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
-                            ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) ==
-                            PackageManager.PERMISSION_GRANTED
-                        ) {
-                            NotificationManagerCompat.from(this@MainActivity).notify(1001, notification)
-                        }
-                    }
-                } else {
-                    onLatestVersionNameChange(BuildConfig.BASE_VERSION_NAME)
-                    availableUpdate = null
                 }
+            }
+        }
+
+        // Hand the verified APK to the official installer; the result flows
+        // back into the ViewModel so the UI can react to user approval (the
+        // process gets replaced) or cancellation (state restores).
+        val updateInstallLauncher =
+            rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+                appUpdateViewModel.onInstallLauncherResult(result.resultCode)
+            }
+        LaunchedEffect(Unit) {
+            appUpdateViewModel.pendingInstall.collect { intent ->
+                intent?.let { updateInstallLauncher.launch(it) }
             }
         }
 
@@ -1485,6 +1489,7 @@ class MainActivity : FragmentActivity() {
                                         navController = navController,
                                         scrollBehavior = topAppBarScrollBehavior,
                                         latestVersionName = latestVersionName,
+                                        appUpdateViewModel = appUpdateViewModel,
                                         activity = this@MainActivity,
                                         snackbarHostState = snackbarHostState,
                                     )
@@ -1538,74 +1543,59 @@ class MainActivity : FragmentActivity() {
                         }
                     }
 
-                    if (!showChangelog.value) {
-                        availableUpdate?.let { update ->
-                            val dismissUpdate: () -> Unit = {
-                                availableUpdate = null
-                                lifecycleScope.launch {
-                                    safeDataStoreEdit {
-                                        it[update.dismissalKey] = update.release.tagName
-                                    }
-                                }
+                    if (!showChangelog.value && BuildConfig.UPDATER_AVAILABLE) {
+                        val availableInfo by appUpdateViewModel.availableInfo.collectAsStateWithLifecycle()
+                        val (dismissedUpdateTag) = rememberPreference(DismissedStandaloneUpdateKey, defaultValue = "")
+                        var updateDialogEngaged by remember { mutableStateOf<String?>(null) }
+
+                        val dialogInfo = availableInfo
+                        val dialogState = updateStatus
+                        val showDialog =
+                            when {
+                                dialogState is UpdateStatus.Available ->
+                                    dialogInfo != null &&
+                                        dialogState.info.tag != dismissedUpdateTag &&
+                                        dialogState.info.tag != updateDialogEngaged
+                                dialogState is UpdateStatus.Downloading ||
+                                    dialogState is UpdateStatus.Verifying ||
+                                    dialogState is UpdateStatus.ReadyToInstall ||
+                                    dialogState is UpdateStatus.Installing ||
+                                    dialogState is UpdateStatus.InstallPermissionRequired ||
+                                    dialogState is UpdateStatus.CheckFailed ->
+                                    // The flow was accepted by the user in
+                                    // this session: keep it visible till it
+                                    // resolves.
+                                    updateDialogEngaged != null && dialogInfo != null
+                                else -> false
                             }
-                            AlertDialog(
-                                onDismissRequest = dismissUpdate,
-                                title = { Text(stringResource(R.string.update_available_title)) },
-                                text = {
-                                    Column(
-                                        modifier =
-                                            Modifier
-                                                .heightIn(max = 480.dp)
-                                                .verticalScroll(rememberScrollState()),
-                                    ) {
-                                        Text(
-                                            text =
-                                                stringResource(
-                                                    if (update.isKmp) {
-                                                        R.string.kmp_upgrade_title
-                                                    } else {
-                                                        R.string.update_available_message
-                                                    },
-                                                    update.release.versionName,
-                                                ),
-                                            style = MaterialTheme.typography.bodyMedium,
-                                        )
-                                        if (update.isKmp) {
-                                            Text(
-                                                text = stringResource(R.string.kmp_upgrade_warning),
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = MaterialTheme.colorScheme.error,
-                                                modifier = Modifier.padding(top = 12.dp),
-                                            )
-                                        }
-                                        Text(
-                                            text = stringResource(R.string.changelog),
-                                            style = MaterialTheme.typography.titleSmall,
-                                            modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
-                                        )
-                                        Text(
-                                            text = update.release.description.ifBlank { stringResource(R.string.changelog_empty) },
-                                            style = MaterialTheme.typography.bodySmall,
-                                        )
-                                    }
+
+                        if (showDialog && dialogInfo != null) {
+                            MeloraUpdateDialog(
+                                info = dialogInfo,
+                                status = dialogState,
+                                onUpdateNow = {
+                                    updateDialogEngaged = dialogInfo.tag
+                                    appUpdateViewModel.downloadAndVerify()
                                 },
-                                confirmButton = {
-                                    TextButton(
-                                        onClick = {
-                                            dismissUpdate()
-                                            startActivity(Intent(Intent.ACTION_VIEW, update.downloadUrl.toUri()))
-                                        },
-                                    ) {
-                                        Text(
-                                            stringResource(
-                                                if (update.isKmp) R.string.kmp_upgrade_action else R.string.update_action,
-                                            ),
-                                        )
-                                    }
+                                onInstallNow = { appUpdateViewModel.requestInstall() },
+                                onCancelDownload = {
+                                    updateDialogEngaged = null
+                                    appUpdateViewModel.cancelDownload()
                                 },
-                                dismissButton = {
-                                    TextButton(onClick = dismissUpdate) {
-                                        Text(stringResource(R.string.kmp_upgrade_later))
+                                onGrantPermission = { appUpdateViewModel.requestUnknownSourcesScreen() },
+                                onRemindLater = { appUpdateViewModel.remindLater() },
+                                onDismiss = {
+                                    // Closing an in-flight drill (Coaching/Installing/...)
+                                    // only hides the dialog; a dismissal of the plain
+                                    // offer stores the "remind later" tag.
+                                    when (dialogState) {
+                                        is UpdateStatus.Downloading,
+                                        is UpdateStatus.Verifying,
+                                        is UpdateStatus.ReadyToInstall,
+                                        is UpdateStatus.Installing,
+                                        is UpdateStatus.InstallPermissionRequired,
+                                        is UpdateStatus.CheckFailed -> updateDialogEngaged = null
+                                        else -> appUpdateViewModel.remindLater()
                                     }
                                 },
                             )
