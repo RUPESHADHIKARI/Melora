@@ -55,4 +55,37 @@ class MediaItemExtTest {
         val clean = updated.withUpdatedMetadata(requireNotNull(original.metadata))
         assertFalse(requireNotNull(clean.mediaMetadata.extras).containsKey(EXTRAS_KEY_IS_EXPLICIT))
     }
+
+    // The session metadata is what OS media surfaces (media controls, OEM
+    // floating displays) read; these lock the duration contract they rely on.
+    private fun metadata(duration: Int) =
+        MediaMetadata(
+            id = "song",
+            title = "Test song",
+            artists = emptyList(),
+            duration = duration,
+        )
+
+    @Test
+    fun `known duration is published to session metadata`() {
+        assertEquals(200_000L, metadata(200).toMediaItem().mediaMetadata.durationMs)
+    }
+
+    @Test
+    fun `unknown duration is not published`() {
+        assertNull(metadata(-1).toMediaItem().mediaMetadata.durationMs)
+        assertNull(metadata(0).toMediaItem().mediaMetadata.durationMs)
+    }
+
+    @Test
+    fun `updated metadata overwrites duration when known`() {
+        val item = metadata(200).toMediaItem()
+        assertEquals(180_000L, item.withUpdatedMetadata(metadata(180)).mediaMetadata.durationMs)
+    }
+
+    @Test
+    fun `updated metadata keeps previous duration when unknown`() {
+        val item = metadata(200).toMediaItem()
+        assertEquals(200_000L, item.withUpdatedMetadata(metadata(-1)).mediaMetadata.durationMs)
+    }
 }

@@ -933,6 +933,7 @@ constructor(
                     .setIsPlayable(isPlayable)
                     .setIsBrowsable(isBrowsable)
                     .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
+                    .apply { if (song.duration > 0) setDurationMs(song.duration * 1000L) }
                     .build(),
             ).build()
     }

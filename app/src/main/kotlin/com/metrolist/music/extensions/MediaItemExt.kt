@@ -24,6 +24,16 @@ fun Song.toMediaItem() = toMediaMetadata().toMediaItem()
 
 fun SongItem.toMediaItem() = toMediaMetadata().toMediaItem()
 
+/**
+ * Builds the playable MediaItem handed to the media session, notification and
+ * OS media surfaces. durationMs is set explicitly: system media controls and
+ * OEM floating displays read METADATA_KEY_DURATION to render progress and some
+ * treat a session without duration as incomplete.
+ *
+ * Tested: HONOR X6a (MagicOS 8) floating display works; realme C61 (realme UI
+ * 7.0) Mini Capsule does not — oplus SystemUI only shows allowlisted packages
+ * (not fixable app-side); emulator API 35 verified via dumpsys media_session.
+ */
 fun MediaMetadata.toMediaItem(): MediaItem {
     val resolvedMetadata = withResolvedArtistNameAliases()
     val artistNames = resolvedMetadata.artists.joinToString { it.name }
@@ -42,6 +52,7 @@ fun MediaMetadata.toMediaItem(): MediaItem {
                 .setAlbumArtist(resolvedMetadata.artists.firstOrNull()?.name)
                 .setDisplayTitle(resolvedMetadata.title)
                 .setMediaType(MEDIA_TYPE_MUSIC)
+                .apply { if (resolvedMetadata.duration > 0) setDurationMs(resolvedMetadata.duration * 1000L) }
                 .setIsBrowsable(false)
                 .setIsPlayable(true)
                 .setExtras(Bundle().apply {
@@ -74,6 +85,7 @@ fun MediaItem.withUpdatedMetadata(updatedMetadata: MediaMetadata): MediaItem {
                 .setArtworkUri(resolvedMetadata.thumbnailUrl?.toUri())
                 .setAlbumTitle(resolvedMetadata.album?.title)
                 .setAlbumArtist(resolvedMetadata.artists.firstOrNull()?.name)
+                .apply { if (resolvedMetadata.duration > 0) setDurationMs(resolvedMetadata.duration * 1000L) }
                 .setExtras(Bundle().apply {
                     resolvedMetadata.thumbnailUrl?.let { putString("artwork_uri", it) }
                     if (resolvedMetadata.explicit) putLong(EXTRAS_KEY_IS_EXPLICIT, EXTRAS_VALUE_ATTRIBUTE_PRESENT)
