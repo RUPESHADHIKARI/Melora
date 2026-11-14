@@ -31,6 +31,19 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # Restore the stable development key so release APKs keep one signature
+      # across local and CI builds; without it the updater rejects the APK on
+      # installed devices (SIGNATURE_MISMATCH).
+      - name: Restore stable signing key
+        env:
+          MELORA_KEYSTORE_B64: ${{ secrets.MELORA_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$MELORA_KEYSTORE_B64" ]; then
+            echo "$MELORA_KEYSTORE_B64" | base64 -d > app/persistent-debug.keystore
+          else
+            echo "::warning::MELORA_KEYSTORE_B64 is not set; this release is signed with a per-run key and the in-app updater will reject it for existing installs."
+          fi
+
       - name: Set up JDK 21
         uses: actions/setup-java@v6
         with:
@@ -73,6 +86,25 @@ jobs:
           mkdir -p release
           mv app/build/outputs/apk/foss/release/*.apk "release/Melora-${{ inputs.tag }}.apk"
 
+      # The in-app Update Center only offers releases that ship a latest.json
+      # manifest; generate it from the built APK so every release is
+      # update-ready without manual attachment.
+      - name: Generate update manifest
+        run: |
+          SHA=$(sha256sum "release/Melora-${{ inputs.tag }}.apk" | awk '{ print $1 }')
+          CODE=$(jq -r '.elements[0].versionCode' app/build/outputs/apk/foss/release/output-metadata.json)
+          NAME=$(jq -r '.elements[0].versionName' app/build/outputs/apk/foss/release/output-metadata.json)
+          jq -n \
+            --arg name "$NAME" \
+            --argjson code "$CODE" \
+            --arg url "https://github.com/${{ github.repository }}/releases/download/${{ inputs.tag }}/Melora-${{ inputs.tag }}.apk" \
+            --arg sha "$SHA" \
+            --arg tag "${{ inputs.tag }}" \
+            --arg title "${{ inputs.title }}" \
+            '{versionName: $name, versionCode: $code, apkUrl: $url, sha256: $sha, tagName: $tag, releaseTitle: $title}' \
+            > release/latest.json
+          cat release/latest.json
+
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -94,6 +126,7 @@ jobs:
 
           gh release create "${{ inputs.tag }}" \
             "release/Melora-${{ inputs.tag }}.apk" \
+            "release/latest.json" \
             --title "${{ inputs.title }}" \
             --notes-file release-notes.md \
             --latest
