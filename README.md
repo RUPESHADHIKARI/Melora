@@ -75,9 +75,9 @@ Grab the latest optimized, signed build from the [**Releases**](https://github.c
 
 | | |
 |---|---|
-| **Current version** | [v1.0.3](https://github.com/RUPESHADHIKARI/Melora/releases/tag/v1.0.3) |
-| **APK** | [`Melora-v1.0.3.apk`](https://github.com/RUPESHADHIKARI/Melora/releases/download/v1.0.3/Melora-v1.0.3.apk) (~25.5 MB) |
-| **SHA-256** | `5BD86D2ADE225587F9BCB3AD2BE6085BAA5C2F20617D94B4FCCCB0CFAFE801DB` |
+| **Current version** | [v1.0.4](https://github.com/RUPESHADHIKARI/Melora/releases/tag/v1.0.4) |
+| **APK** | [`Melora-v1.0.4.apk`](https://github.com/RUPESHADHIKARI/Melora/releases/download/v1.0.4/Melora-v1.0.4.apk) (~25.6 MB) |
+| **SHA-256** | `F8273666B8F14444292B2E4B16781607FCA07371D0EF05100BFCB269C34B6A3F` |
 | **Package** | `com.melora.app` (label: *Melora - by Rupesh*) |
 | **Requires** | Android 8.0 (API 26) or newer |
 
