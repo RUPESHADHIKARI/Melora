@@ -44,6 +44,7 @@ A free, open-source YouTube Music client for Android — stream, download and ma
 
 - **Stream the whole YouTube Music catalog** — songs, videos, albums, artists, playlists
 - **Background & lock-screen playback** with a polished notification
+- **Floating Music Island** — an iPhone-style capsule that hugs the camera cutout with live artwork and a beat waveform; tap to expand into full playback controls (Settings → Appearance)
 - **Download & offline playback** — cache songs or save full playlists to your device
 - **Import / export backups** of your settings, playlists and history
 
@@ -74,9 +75,9 @@ Grab the latest optimized, signed build from the [**Releases**](https://github.c
 
 | | |
 |---|---|
-| **Current version** | [v1.0.1](https://github.com/RUPESHADHIKARI/Melora/releases/tag/v1.0.1) |
-| **APK** | [`Melora-v1.0.1.apk`](https://github.com/RUPESHADHIKARI/Melora/releases/download/v1.0.1/Melora-v1.0.1.apk) (~24.6 MB) |
-| **SHA-256** | `9A7F6332AD8C6F1125CF16C9EFFCCF9B8903A336C0B49553195C4BB64ACD6E98` |
+| **Current version** | [v1.0.3](https://github.com/RUPESHADHIKARI/Melora/releases/tag/v1.0.3) |
+| **APK** | [`Melora-v1.0.3.apk`](https://github.com/RUPESHADHIKARI/Melora/releases/download/v1.0.3/Melora-v1.0.3.apk) (~25.5 MB) |
+| **SHA-256** | `5BD86D2ADE225587F9BCB3AD2BE6085BAA5C2F20617D94B4FCCCB0CFAFE801DB` |
 | **Package** | `com.melora.app` (label: *Melora - by Rupesh*) |
 | **Requires** | Android 8.0 (API 26) or newer |
 
