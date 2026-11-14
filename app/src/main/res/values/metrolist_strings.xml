@@ -1139,4 +1139,20 @@
     <string name="stream_source_web_creator_desc">Creator web client.</string>
     <string name="top_result">Top result</string>
     <string name="other">Other</string>
+
+    <!-- Floating Music Island -->
+    <string name="dynamic_island">Floating Music Island</string>
+    <string name="dynamic_island_enable">Enable Floating Music Island</string>
+    <string name="dynamic_island_enable_desc">Show a MELORA playback capsule over other apps while music plays in the background</string>
+    <string name="dynamic_island_animation">Open and close animations</string>
+    <string name="dynamic_island_show_artwork">Show album artwork</string>
+    <string name="dynamic_island_show_waveform">Show animated waveform</string>
+    <string name="dynamic_island_auto_show">Auto-show during background playback</string>
+    <string name="dynamic_island_auto_show_desc">When off, the island stays hidden while MELORA plays in the background</string>
+    <string name="dynamic_island_permission">Display over other apps</string>
+    <string name="dynamic_island_permission_granted">Permission granted</string>
+    <string name="dynamic_island_permission_denied">Not granted - tap to open the permission screen. The island stays hidden until granted.</string>
+    <string name="dynamic_island_reset">Reset to defaults</string>
+    <string name="dynamic_island_preview">Preview</string>
+    <string name="dynamic_island_preview_title">Song title</string>
 </resources>

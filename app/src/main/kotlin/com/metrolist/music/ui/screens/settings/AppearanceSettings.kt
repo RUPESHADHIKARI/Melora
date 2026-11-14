@@ -5,11 +5,16 @@
 
 package com.metrolist.music.ui.screens.settings
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
+import android.provider.Settings
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -44,12 +49,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.metrolist.music.LocalPlayerAwareWindowInsets
 import com.metrolist.music.R
@@ -58,6 +66,11 @@ import com.metrolist.music.constants.CropAlbumArtKey
 import com.metrolist.music.constants.DefaultOpenTabKey
 import com.metrolist.music.constants.DensityScale
 import com.metrolist.music.constants.DensityScaleKey
+import com.metrolist.music.constants.DynamicIslandAnimateKey
+import com.metrolist.music.constants.DynamicIslandAutoShowKey
+import com.metrolist.music.constants.DynamicIslandEnabledKey
+import com.metrolist.music.constants.DynamicIslandShowArtworkKey
+import com.metrolist.music.constants.DynamicIslandShowWaveformKey
 import com.metrolist.music.constants.DynamicThemeKey
 import com.metrolist.music.constants.EnableDynamicIconKey
 import com.metrolist.music.constants.EnableHighRefreshRateKey
@@ -1837,6 +1850,329 @@ fun AppearanceSettings(
                     ),
                 ),
         )
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // ── Floating Music Island ────────────────────────────────────────
+        val (dynamicIslandEnabled, onDynamicIslandEnabledChange) =
+            rememberPreference(DynamicIslandEnabledKey, defaultValue = false)
+        val (dynamicIslandShowArtwork, onDynamicIslandShowArtworkChange) =
+            rememberPreference(DynamicIslandShowArtworkKey, defaultValue = true)
+        val (dynamicIslandShowWaveform, onDynamicIslandShowWaveformChange) =
+            rememberPreference(DynamicIslandShowWaveformKey, defaultValue = true)
+        val (dynamicIslandAutoShow, onDynamicIslandAutoShowChange) =
+            rememberPreference(DynamicIslandAutoShowKey, defaultValue = true)
+        val (dynamicIslandAnimate, onDynamicIslandAnimateChange) =
+            rememberPreference(DynamicIslandAnimateKey, defaultValue = true)
+
+        fun openIslandOverlayPermission() {
+            iconContext.startActivity(
+                Intent(
+                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:${iconContext.packageName}"),
+                ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+        }
+
+        val islandOverlayGranted = Settings.canDrawOverlays(iconContext)
+
+        Material3SettingsGroup(
+            title = stringResource(R.string.dynamic_island),
+            items =
+                buildList {
+                    add(
+                        Material3SettingsItem(
+                            icon = painterResource(R.drawable.graphic_eq),
+                            title = { Text(stringResource(R.string.dynamic_island_enable)) },
+                            description = { Text(stringResource(R.string.dynamic_island_enable_desc)) },
+                            trailingContent = {
+                                Switch(
+                                    checked = dynamicIslandEnabled,
+                                    onCheckedChange = { checked ->
+                                        onDynamicIslandEnabledChange(checked)
+                                        // Ask for the overlay permission only when enabling.
+                                        if (checked && !islandOverlayGranted) {
+                                            openIslandOverlayPermission()
+                                        }
+                                    },
+                                    thumbContent = {
+                                        Icon(
+                                            painter =
+                                                painterResource(
+                                                    id = if (dynamicIslandEnabled) R.drawable.check else R.drawable.close,
+                                                ),
+                                            contentDescription = null,
+                                            modifier = Modifier.size(SwitchDefaults.IconSize),
+                                        )
+                                    },
+                                )
+                            },
+                            onClick = {
+                                onDynamicIslandEnabledChange(!dynamicIslandEnabled)
+                                if (!dynamicIslandEnabled && !islandOverlayGranted) {
+                                    openIslandOverlayPermission()
+                                }
+                            },
+                        ),
+                    )
+                    add(
+                        Material3SettingsItem(
+                            icon = painterResource(R.drawable.slow_motion_video),
+                            title = { Text(stringResource(R.string.dynamic_island_animation)) },
+                            trailingContent = {
+                                Switch(
+                                    checked = dynamicIslandAnimate,
+                                    onCheckedChange = onDynamicIslandAnimateChange,
+                                    thumbContent = {
+                                        Icon(
+                                            painter =
+                                                painterResource(
+                                                    id = if (dynamicIslandAnimate) R.drawable.check else R.drawable.close,
+                                                ),
+                                            contentDescription = null,
+                                            modifier = Modifier.size(SwitchDefaults.IconSize),
+                                        )
+                                    },
+                                )
+                            },
+                            onClick = { onDynamicIslandAnimateChange(!dynamicIslandAnimate) },
+                        ),
+                    )
+                    add(
+                        Material3SettingsItem(
+                            icon = painterResource(R.drawable.music_note),
+                            title = { Text(stringResource(R.string.dynamic_island_show_artwork)) },
+                            trailingContent = {
+                                Switch(
+                                    checked = dynamicIslandShowArtwork,
+                                    onCheckedChange = onDynamicIslandShowArtworkChange,
+                                    thumbContent = {
+                                        Icon(
+                                            painter =
+                                                painterResource(
+                                                    id = if (dynamicIslandShowArtwork) R.drawable.check else R.drawable.close,
+                                                ),
+                                            contentDescription = null,
+                                            modifier = Modifier.size(SwitchDefaults.IconSize),
+                                        )
+                                    },
+                                )
+                            },
+                            onClick = { onDynamicIslandShowArtworkChange(!dynamicIslandShowArtwork) },
+                        ),
+                    )
+                    add(
+                        Material3SettingsItem(
+                            icon = painterResource(R.drawable.equalizer),
+                            title = { Text(stringResource(R.string.dynamic_island_show_waveform)) },
+                            trailingContent = {
+                                Switch(
+                                    checked = dynamicIslandShowWaveform,
+                                    onCheckedChange = onDynamicIslandShowWaveformChange,
+                                    thumbContent = {
+                                        Icon(
+                                            painter =
+                                                painterResource(
+                                                    id = if (dynamicIslandShowWaveform) R.drawable.check else R.drawable.close,
+                                                ),
+                                            contentDescription = null,
+                                            modifier = Modifier.size(SwitchDefaults.IconSize),
+                                        )
+                                    },
+                                )
+                            },
+                            onClick = { onDynamicIslandShowWaveformChange(!dynamicIslandShowWaveform) },
+                        ),
+                    )
+                    add(
+                        Material3SettingsItem(
+                            icon = painterResource(R.drawable.timer),
+                            title = { Text(stringResource(R.string.dynamic_island_auto_show)) },
+                            description = { Text(stringResource(R.string.dynamic_island_auto_show_desc)) },
+                            trailingContent = {
+                                Switch(
+                                    checked = dynamicIslandAutoShow,
+                                    onCheckedChange = onDynamicIslandAutoShowChange,
+                                    thumbContent = {
+                                        Icon(
+                                            painter =
+                                                painterResource(
+                                                    id = if (dynamicIslandAutoShow) R.drawable.check else R.drawable.close,
+                                                ),
+                                            contentDescription = null,
+                                            modifier = Modifier.size(SwitchDefaults.IconSize),
+                                        )
+                                    },
+                                )
+                            },
+                            onClick = { onDynamicIslandAutoShowChange(!dynamicIslandAutoShow) },
+                        ),
+                    )
+                    add(
+                        Material3SettingsItem(
+                            icon = painterResource(R.drawable.lock),
+                            title = { Text(stringResource(R.string.dynamic_island_permission)) },
+                            description = {
+                                Text(
+                                    stringResource(
+                                        if (islandOverlayGranted) {
+                                            R.string.dynamic_island_permission_granted
+                                        } else {
+                                            R.string.dynamic_island_permission_denied
+                                        },
+                                    ),
+                                )
+                            },
+                            onClick = { if (!islandOverlayGranted) openIslandOverlayPermission() },
+                        ),
+                    )
+                    add(
+                        Material3SettingsItem(
+                            icon = painterResource(R.drawable.refresh),
+                            title = { Text(stringResource(R.string.dynamic_island_reset)) },
+                            onClick = {
+                                onDynamicIslandEnabledChange(false)
+                                onDynamicIslandShowArtworkChange(true)
+                                onDynamicIslandShowWaveformChange(true)
+                                onDynamicIslandAutoShowChange(true)
+                                onDynamicIslandAnimateChange(true)
+                            },
+                        ),
+                    )
+                },
+        )
+
+        // Static compact/expanded preview of the island.
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Color(0xFF161616))
+                    .padding(vertical = 16.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.dynamic_island_preview),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier =
+                    Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(Color(0xE6000000))
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
+            ) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier =
+                        Modifier
+                            .size(28.dp)
+                            .clip(RoundedCornerShape(9.dp))
+                            .background(Color(0x33FFFFFF)),
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.music_note),
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(start = 8.dp),
+                ) {
+                    listOf(8.dp, 14.dp, 10.dp, 13.dp).forEach { barHeight ->
+                        Box(
+                            modifier =
+                                Modifier
+                                    .padding(horizontal = 1.dp)
+                                    .size(width = 3.dp, height = barHeight)
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(Color.White),
+                        )
+                    }
+                }
+            }
+
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp)
+                        .clip(RoundedCornerShape(22.dp))
+                        .background(Color(0xE6000000))
+                        .padding(16.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier =
+                            Modifier
+                                .size(56.dp)
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(Color(0x33FFFFFF)),
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.music_note),
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(26.dp),
+                        )
+                    }
+
+                    Column(modifier = Modifier.padding(start = 14.dp)) {
+                        Text(
+                            text = "MELORA",
+                            color = Color(0x99FFFFFF),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 2.sp,
+                        )
+                        Text(
+                            text = stringResource(R.string.dynamic_island_preview_title),
+                            color = Color.White,
+                            fontSize = 15.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+
+                Row(
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(top = 12.dp),
+                ) {
+                    listOf(
+                        R.drawable.shuffle to 22,
+                        R.drawable.skip_previous to 24,
+                        R.drawable.pause to 34,
+                        R.drawable.skip_next to 24,
+                        R.drawable.favorite_border to 22,
+                    ).forEach { (icon, sizeDp) ->
+                        Icon(
+                            painter = painterResource(icon),
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier =
+                                Modifier
+                                    .padding(horizontal = 12.dp)
+                                    .size(sizeDp.dp),
+                        )
+                    }
+                }
+            }
+        }
+
         Spacer(modifier = Modifier.height(16.dp))
 
         if (showExperimentalLyricsBetaDialog) {

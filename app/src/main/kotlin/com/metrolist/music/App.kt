@@ -5,12 +5,14 @@
 
 package com.metrolist.music
 
+import android.app.Activity
 import android.app.ActivityManager
 import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
+import android.os.Bundle
 import android.os.Process
 import android.widget.Toast
 import coil3.ImageLoader
@@ -32,6 +34,7 @@ import com.metrolist.music.constants.*
 import com.metrolist.music.di.ApplicationScope
 import com.metrolist.music.extensions.toEnum
 import com.metrolist.music.extensions.toInetSocketAddress
+import com.metrolist.music.overlay.FloatingIslandController
 import com.metrolist.music.utils.CrashHandler
 import com.metrolist.music.utils.ArtistNameAliases
 import com.metrolist.music.utils.InnerTubeXPlayer
@@ -66,12 +69,42 @@ class App :
     @ApplicationScope
     lateinit var applicationScope: CoroutineScope
 
+    @Inject
+    lateinit var floatingIslandController: FloatingIslandController
+
     override fun onCreate() {
         super.onCreate()
 
         // CrashActivity runs in a separate process. Starting the full app there can make that
         // process claim WebView's data directory and crash the next main-process WebView.
         if (!isMainProcess()) return
+
+        // Track app foreground state for the Floating Music Island visibility rule.
+        registerActivityLifecycleCallbacks(
+            object : Application.ActivityLifecycleCallbacks {
+                private var resumedCount = 0
+
+                override fun onActivityResumed(activity: Activity) {
+                    resumedCount++
+                    floatingIslandController.setAppInForeground(true)
+                }
+
+                override fun onActivityPaused(activity: Activity) {
+                    resumedCount--
+                    floatingIslandController.setAppInForeground(resumedCount > 0)
+                }
+
+                override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
+
+                override fun onActivityStarted(activity: Activity) = Unit
+
+                override fun onActivityStopped(activity: Activity) = Unit
+
+                override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
+
+                override fun onActivityDestroyed(activity: Activity) = Unit
+            },
+        )
 
         // Install crash handler first
         CrashHandler.install(this)

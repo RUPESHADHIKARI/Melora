@@ -30,6 +30,13 @@ enum class MiniPlayerBackgroundStyle {
     PURE_BLACK,
 }
 
+val DynamicIslandEnabledKey = booleanPreferencesKey("dynamicIslandEnabled")
+val DynamicIslandShowArtworkKey = booleanPreferencesKey("dynamicIslandShowArtwork")
+val DynamicIslandShowWaveformKey = booleanPreferencesKey("dynamicIslandShowWaveform")
+val DynamicIslandAutoShowKey = booleanPreferencesKey("dynamicIslandAutoShow")
+val DynamicIslandAnimateKey = booleanPreferencesKey("dynamicIslandAnimate")
+
+
 val DensityScaleKey = floatPreferencesKey("density_scale_factor")
 
 enum class DensityScale(

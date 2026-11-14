@@ -186,10 +186,12 @@ import com.metrolist.music.extensions.findNextMediaItemById
 import com.metrolist.music.extensions.mediaItems
 import com.metrolist.music.extensions.metadata
 import com.metrolist.music.extensions.setOffloadEnabled
+import com.metrolist.music.extensions.togglePlayPause
 import com.metrolist.music.extensions.toEnum
 import com.metrolist.music.extensions.toMediaItem
 import com.metrolist.music.extensions.toPersistQueue
 import com.metrolist.music.extensions.toQueue
+import com.metrolist.music.overlay.FloatingIslandHost
 import com.metrolist.music.lyrics.LyricsHelper
 import com.metrolist.music.models.PersistPlayerState
 import com.metrolist.music.models.PersistQueue
@@ -266,7 +268,8 @@ private const val INSTANT_SILENCE_SKIP_SETTLE_MS = 350L
 class MusicService :
     MediaLibraryService(),
     Player.Listener,
-    PlaybackStatsListener.Callback {
+    PlaybackStatsListener.Callback,
+    FloatingIslandHost {
     @Inject
     @com.metrolist.music.di.ApplicationScope
     lateinit var applicationScope: CoroutineScope
@@ -297,6 +300,9 @@ class MusicService :
 
     @Inject
     lateinit var listenTogetherManager: com.metrolist.music.listentogether.ListenTogetherManager
+
+    @Inject
+    lateinit var floatingIslandController: com.metrolist.music.overlay.FloatingIslandController
 
     private lateinit var audioManager: AudioManager
     private var audioFocusRequest: AudioFocusRequest? = null
@@ -1002,6 +1008,7 @@ class MusicService :
 
                 player = newPlayer
                 _playerFlow.value = newPlayer
+                floatingIslandController.attachPlayer(newPlayer, this)
 
                 Timber.tag("MusicService").i("Player recreated with AudioTrackPlaybackParams: $useAudioTrackParams")
             }
@@ -1390,6 +1397,7 @@ class MusicService :
 
         // Cleanup handled manually in onDestroy/release
         _playerFlow.value = player
+        floatingIslandController.attachPlayer(player, this)
         return player
     }
 
@@ -2192,7 +2200,44 @@ class MusicService :
         }
     }
 
-    fun toggleLike() {
+    // ── FloatingIslandHost: island commands reuse the session's player ────
+    // The island is only visible while the local player is playing, so no
+    // Cast handling is needed here.
+
+    override fun togglePlayPause() {
+        if (!::player.isInitialized) return
+        if (player.playbackState == Player.STATE_IDLE) player.prepare()
+        player.togglePlayPause()
+    }
+
+    override fun seekToNext() {
+        if (!::player.isInitialized) return
+        player.seekToNext()
+        if (player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED) {
+            player.prepare()
+        }
+        player.playWhenReady = true
+    }
+
+    override fun seekToPrevious() {
+        if (!::player.isInitialized) return
+        if (player.currentPosition > 3000 || !player.hasPreviousMediaItem()) {
+            player.seekTo(0)
+        } else {
+            player.seekToPreviousMediaItem()
+        }
+        if (player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED) {
+            player.prepare()
+        }
+        player.playWhenReady = true
+    }
+
+    override fun toggleShuffle() {
+        if (!::player.isInitialized) return
+        player.shuffleModeEnabled = !player.shuffleModeEnabled
+    }
+
+    override fun toggleLike() {
         scope.launch {
             val songToToggle = currentSong.first()
             songToToggle?.let { librarySong ->
@@ -4263,6 +4308,7 @@ class MusicService :
 
     override fun onDestroy() {
         isRunning = false
+        floatingIslandController.detachPlayer()
 
         if (!::player.isInitialized) {
             try {
@@ -4909,6 +4955,7 @@ class MusicService :
         fadingPlayer = currentPlayer
         player = nextPlayer
         _playerFlow.value = player
+        floatingIslandController.attachPlayer(nextPlayer, this)
         secondaryPlayer = null
 
         // Do not persist the retired player's temporary repeat-off state.
