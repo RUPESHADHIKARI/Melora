@@ -603,7 +603,7 @@ class MainActivity : FragmentActivity() {
             }
         }
 
-        val enableDynamicTheme by rememberPreference(DynamicThemeKey, defaultValue = false)
+        val enableDynamicTheme by rememberPreference(DynamicThemeKey, defaultValue = true)
         val enableHighRefreshRate by rememberPreference(EnableHighRefreshRateKey, defaultValue = true)
 
         LaunchedEffect(enableHighRefreshRate) {
@@ -1047,6 +1047,9 @@ class MainActivity : FragmentActivity() {
                             currentRoute == "listen_together_from_topbar"
                     shouldShowTopBar = currentRoute in topLevelScreens &&
                         currentRoute != "settings" &&
+                        // The Library tab renders its own in-screen "Your Library"
+                        // header instead of the generic top app bar.
+                        currentRoute != Screens.Library.route &&
                         !(isListenTogetherScreen && listenTogetherInTopBar)
                 }
 

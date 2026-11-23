@@ -143,7 +143,7 @@ fun AppearanceSettings(
     val (dynamicTheme, onDynamicThemeChange) =
         rememberPreference(
             DynamicThemeKey,
-            defaultValue = false,
+            defaultValue = true,
         )
     val (enableDynamicIcon, onEnableDynamicIconPrefChange) =
         rememberPreference(

@@ -2258,7 +2258,7 @@ class MusicService :
                     update(song)
                     syncUtils.likeSong(song)
 
-                    if (dataStore.get(AutoDownloadOnLikeKey, false) && song.liked) {
+                    if (dataStore.get(AutoDownloadOnLikeKey, true) && song.liked) {
                         downloadUtil.download(song.id)
                     }
                 }

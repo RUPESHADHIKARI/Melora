@@ -65,6 +65,7 @@ import com.metrolist.music.constants.CONTENT_TYPE_PLAYLIST
 import com.metrolist.music.constants.GridItemSize
 import com.metrolist.music.constants.GridItemsSizeKey
 import com.metrolist.music.constants.GridThumbnailHeight
+import com.metrolist.music.constants.LibraryFilter
 import com.metrolist.music.constants.LibraryViewType
 import com.metrolist.music.constants.MixSortDescendingKey
 import com.metrolist.music.constants.MixSortType
@@ -119,6 +120,7 @@ fun LibraryMixScreen(
     viewType: LibraryViewType,
     onViewTypeChange: (LibraryViewType) -> Unit,
     viewModel: LibraryMixViewModel = hiltViewModel(),
+    onOpenFilter: (LibraryFilter) -> Unit = {},
 ) {
     val menuState = LocalMenuState.current
     val haptic = LocalHapticFeedback.current
@@ -160,6 +162,7 @@ fun LibraryMixScreen(
             debouncedSearchQuery.normalizeForSearch()
         }
     }
+    val showHomeSections = !isSearchActive && normalizedQuery.isBlank()
 
     val topSize by viewModel.topValue.collectAsStateWithLifecycle(initialValue = 50)
     val likedPlaylist =
@@ -235,9 +238,9 @@ fun LibraryMixScreen(
     val albums = viewModel.albums.collectAsStateWithLifecycle()
     val artist = viewModel.artists.collectAsStateWithLifecycle()
     val songs = viewModel.songs.collectAsStateWithLifecycle()
-    val playlist = viewModel.playlists.collectAsStateWithLifecycle()
+    val playlists = viewModel.playlists.collectAsStateWithLifecycle()
 
-    var allItems = albums.value + artist.value + playlist.value
+    var allItems = albums.value + artist.value + playlists.value
     val locale = LocalLocale.current.platformLocale
     val collator = remember(locale) {
         Collator.getInstance(locale).apply {
@@ -374,7 +377,7 @@ fun LibraryMixScreen(
     }
 
     val headerContent = @Composable {
-        LibrarySearchHeader(
+        LibraryHeader(
             isSearchActive = isSearchActive,
             searchQuery = searchQuery,
             onSearchQueryChange = viewModel::updateSearchQuery,
@@ -383,57 +386,59 @@ fun LibraryMixScreen(
                 viewModel.updateSearchQuery("")
             },
             keyboardController = keyboardController,
+            onCreateClick = { showCreatePlaylistDialog = true },
+            onSearchClick = { isSearchActive = true },
+            sortRow = {
+                SortHeader(
+                    sortType = sortType,
+                    sortDescending = sortDescending,
+                    onSortTypeChange = onSortTypeChange,
+                    onSortDescendingChange = onSortDescendingChange,
+                    sortTypeText = { sortType ->
+                        when (sortType) {
+                            MixSortType.CREATE_DATE -> R.string.sort_by_create_date
+                            MixSortType.LAST_UPDATED -> R.string.sort_by_last_updated
+                            MixSortType.NAME -> R.string.sort_by_name
+                        }
+                    },
+                )
+
+                Spacer(Modifier.weight(1f))
+
+                IconButton(
+                    onClick = { isSearchActive = true },
+                    modifier = Modifier.padding(start = 8.dp).size(40.dp),
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.search),
+                        contentDescription = stringResource(R.string.search),
+                    )
+                }
+
+                IconButton(
+                    onClick = {
+                        onViewTypeChange(viewType.toggle())
+                    },
+                    modifier = Modifier.padding(end = 8.dp).size(40.dp),
+                ) {
+                    Icon(
+                        painter = painterResource(
+                            when (viewType) {
+                                LibraryViewType.LIST -> R.drawable.list
+                                LibraryViewType.GRID -> R.drawable.grid_view
+                            },
+                        ),
+                        contentDescription = stringResource(
+                            when (viewType) {
+                                LibraryViewType.LIST -> R.string.switch_to_grid_view
+                                LibraryViewType.GRID -> R.string.switch_to_list_view
+                            },
+                        ),
+                    )
+                }
+            },
             modifier = Modifier.padding(start = 16.dp),
-        ) {
-            SortHeader(
-                sortType = sortType,
-                sortDescending = sortDescending,
-                onSortTypeChange = onSortTypeChange,
-                onSortDescendingChange = onSortDescendingChange,
-                sortTypeText = { sortType ->
-                    when (sortType) {
-                        MixSortType.CREATE_DATE -> R.string.sort_by_create_date
-                        MixSortType.LAST_UPDATED -> R.string.sort_by_last_updated
-                        MixSortType.NAME -> R.string.sort_by_name
-                    }
-                },
-            )
-
-            Spacer(Modifier.weight(1f))
-
-            IconButton(
-                onClick = { isSearchActive = true },
-                modifier = Modifier.padding(start = 8.dp).size(40.dp),
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.search),
-                    contentDescription = stringResource(R.string.search),
-                )
-            }
-
-            IconButton(
-                onClick = {
-                    onViewTypeChange(viewType.toggle())
-                },
-                modifier = Modifier.padding(end = 8.dp).size(40.dp),
-            ) {
-                Icon(
-                    painter =
-                    painterResource(
-                        when (viewType) {
-                            LibraryViewType.LIST -> R.drawable.list
-                            LibraryViewType.GRID -> R.drawable.grid_view
-                        },
-                    ),
-                    contentDescription = stringResource(
-                        when (viewType) {
-                            LibraryViewType.LIST -> R.string.switch_to_grid_view
-                            LibraryViewType.GRID -> R.string.switch_to_list_view
-                        },
-                    ),
-                )
-            }
-        }
+        )
     }
 
     val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
@@ -456,107 +461,64 @@ fun LibraryMixScreen(
                     contentPadding = LocalPlayerAwareWindowInsets.current.asPaddingValues(),
                 ) {
                     item(
-                        key = "filter",
-                        contentType = CONTENT_TYPE_HEADER,
-                    ) {
-                        filterContent()
-                    }
-
-                    item(
                         key = "header",
                         contentType = CONTENT_TYPE_HEADER,
                     ) {
                         headerContent()
                     }
 
-                    if (showLikedPlaylist) {
+                    if (showHomeSections) {
                         item(
-                            key = "likedPlaylist",
-                            contentType = { CONTENT_TYPE_PLAYLIST },
+                            key = "filter",
+                            contentType = CONTENT_TYPE_HEADER,
                         ) {
-                            PlaylistListItem(
-                                playlist = likedPlaylist,
-                                autoPlaylist = true,
-                                modifier =
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            navController.navigate("auto_playlist/liked")
-                                        }.animateItem(),
+                            filterContent()
+                        }
+                        item(
+                            key = "your_collection",
+                            contentType = CONTENT_TYPE_HEADER,
+                        ) {
+                            LibraryCollectionSection(
+                                navController = navController,
+                                likedPlaylist = likedPlaylist,
+                                downloadedPlaylist = downloadPlaylist,
+                                cachedPlaylist = cachedPlaylist,
+                                topPlaylist = topPlaylist,
+                                uploadedPlaylist = uploadedPlaylist,
+                                topSize = topSize.toString(),
                             )
                         }
-                    }
 
-                    if (showDownloadedPlaylist) {
                         item(
-                            key = "downloadedPlaylist",
-                            contentType = { CONTENT_TYPE_PLAYLIST },
+                            key = "music_spaces",
+                            contentType = CONTENT_TYPE_HEADER,
                         ) {
-                            PlaylistListItem(
-                                playlist = downloadPlaylist,
-                                autoPlaylist = true,
-                                modifier =
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            navController.navigate("auto_playlist/downloaded")
-                                        }
-                                        .animateItem(),
+                            MusicSpacesSection(
+                                playlists = playlists.value,
+                                onCreateClick = { showCreatePlaylistDialog = true },
+                                onOpenPlaylist = { playlistId ->
+                                    navController.navigate("local_playlist/$playlistId")
+                                },
                             )
                         }
-                    }
 
-                    if (showCachedPlaylists) {
                         item(
-                            key = "cachedPlaylist",
-                            contentType = { CONTENT_TYPE_PLAYLIST },
+                            key = "smart_collections",
+                            contentType = CONTENT_TYPE_HEADER,
                         ) {
-                            PlaylistListItem(
-                                playlist = cachedPlaylist,
-                                autoPlaylist = true,
-                                modifier =
-                                Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        navController.navigate("cache_playlist/cached")
-                                    }
-                                    .animateItem(),
+                            SmartCollectionsSection(
+                                navController = navController,
+                                topSize = topSize.toString(),
+                                onOpenFilter = onOpenFilter,
                             )
                         }
-                    }
 
-                    if (showTopPlaylists) {
                         item(
-                            key = "TopPlaylist",
-                            contentType = { CONTENT_TYPE_PLAYLIST },
+                            key = "offline_vault",
+                            contentType = CONTENT_TYPE_HEADER,
                         ) {
-                            PlaylistListItem(
-                                playlist = topPlaylist,
-                                autoPlaylist = true,
-                                modifier =
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            navController.navigate("top_playlist/$topSize")
-                                        }.animateItem(),
-                            )
-                        }
-                    }
-
-                    if (showUploadedPlaylists) {
-                        item(
-                            key = "uploadedPlaylist",
-                            contentType = { CONTENT_TYPE_PLAYLIST },
-                        ) {
-                            PlaylistListItem(
-                                playlist = uploadedPlaylist,
-                                autoPlaylist = true,
-                                modifier =
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            navController.navigate("auto_playlist/uploaded")
-                                        }.animateItem(),
+                            OfflineVaultBanner(
+                                navController = navController,
                             )
                         }
                     }
@@ -782,14 +744,6 @@ fun LibraryMixScreen(
                     contentPadding = LocalPlayerAwareWindowInsets.current.asPaddingValues(),
                 ) {
                     item(
-                        key = "filter",
-                        span = { GridItemSpan(maxLineSpan) },
-                        contentType = CONTENT_TYPE_HEADER,
-                    ) {
-                        filterContent()
-                    }
-
-                    item(
                         key = "header",
                         span = { GridItemSpan(maxLineSpan) },
                         contentType = CONTENT_TYPE_HEADER,
@@ -797,107 +751,63 @@ fun LibraryMixScreen(
                         headerContent()
                     }
 
-                    if (showLikedPlaylist) {
+                    if (showHomeSections) {
                         item(
-                            key = "likedPlaylist",
-                            contentType = { CONTENT_TYPE_PLAYLIST },
+                            key = "filter",
+                            span = { GridItemSpan(maxLineSpan) },
+                            contentType = CONTENT_TYPE_HEADER,
                         ) {
-                            PlaylistGridItem(
-                                playlist = likedPlaylist,
-                                fillMaxWidth = true,
-                                autoPlaylist = true,
-                                modifier =
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .combinedClickable(
-                                            onClick = {
-                                                navController.navigate("auto_playlist/liked")
-                                            },
-                                        ).animateItem(),
+                            filterContent()
+                        }
+                        item(
+                            key = "your_collection",
+                            span = { GridItemSpan(maxLineSpan) },
+                            contentType = CONTENT_TYPE_HEADER,
+                        ) {
+                            LibraryCollectionSection(
+                                navController = navController,
+                                likedPlaylist = likedPlaylist,
+                                downloadedPlaylist = downloadPlaylist,
+                                cachedPlaylist = cachedPlaylist,
+                                topPlaylist = topPlaylist,
+                                uploadedPlaylist = uploadedPlaylist,
+                                topSize = topSize.toString(),
                             )
                         }
-                    }
 
-                    if (showDownloadedPlaylist) {
                         item(
-                            key = "downloadedPlaylist",
-                            contentType = { CONTENT_TYPE_PLAYLIST },
+                            key = "music_spaces",
+                            span = { GridItemSpan(maxLineSpan) },
+                            contentType = CONTENT_TYPE_HEADER,
                         ) {
-                            PlaylistGridItem(
-                                playlist = downloadPlaylist,
-                                fillMaxWidth = true,
-                                autoPlaylist = true,
-                                modifier =
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .combinedClickable(
-                                            onClick = {
-                                                navController.navigate("auto_playlist/downloaded")
-                                            },
-                                        )
-                                        .animateItem(),
+                            MusicSpacesSection(
+                                playlists = playlists.value,
+                                onCreateClick = { showCreatePlaylistDialog = true },
+                                onOpenPlaylist = { playlistId ->
+                                    navController.navigate("local_playlist/$playlistId")
+                                },
                             )
                         }
-                    }
 
-                    if (showCachedPlaylists) {
                         item(
-                            key = "cachedPlaylist",
-                            contentType = { CONTENT_TYPE_PLAYLIST },
+                            key = "smart_collections",
+                            span = { GridItemSpan(maxLineSpan) },
+                            contentType = CONTENT_TYPE_HEADER,
                         ) {
-                            PlaylistGridItem(
-                                playlist = cachedPlaylist,
-                                fillMaxWidth = true,
-                                autoPlaylist = true,
-                                modifier =
-                                Modifier
-                                    .fillMaxWidth()
-                                    .combinedClickable(
-                                        onClick = {
-                                            navController.navigate("cache_playlist/cached")
-                                        },
-                                    )
-                                    .animateItem(),
+                            SmartCollectionsSection(
+                                navController = navController,
+                                topSize = topSize.toString(),
+                                onOpenFilter = onOpenFilter,
                             )
                         }
-                    }
 
-                    if (showTopPlaylists) {
                         item(
-                            key = "TopPlaylist",
-                            contentType = { CONTENT_TYPE_PLAYLIST },
+                            key = "offline_vault",
+                            span = { GridItemSpan(maxLineSpan) },
+                            contentType = CONTENT_TYPE_HEADER,
                         ) {
-                            PlaylistGridItem(
-                                playlist = topPlaylist,
-                                fillMaxWidth = true,
-                                autoPlaylist = true,
-                                modifier =
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .combinedClickable(
-                                            onClick = {
-                                                navController.navigate("top_playlist/$topSize")
-                                            },
-                                        ).animateItem(),
-                            )
-                        }
-                    }
-
-                    if (showUploadedPlaylists) {
-                        item(
-                            key = "uploadedPlaylist",
-                            contentType = { CONTENT_TYPE_PLAYLIST },
-                        ) {
-                            PlaylistGridItem(
-                                playlist = uploadedPlaylist,
-                                fillMaxWidth = true,
-                                autoPlaylist = true,
-                                modifier =
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            navController.navigate("auto_playlist/uploaded")
-                                        }.animateItem(),
+                            OfflineVaultBanner(
+                                navController = navController,
                             )
                         }
                     }

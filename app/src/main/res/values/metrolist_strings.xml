@@ -1155,4 +1155,32 @@
     <string name="dynamic_island_reset">Reset to defaults</string>
     <string name="dynamic_island_preview">Preview</string>
     <string name="dynamic_island_preview_title">Song title</string>
+
+    <!-- Library redesign -->
+    <string name="your_library">Your Library</string>
+    <string name="your_music_memories">Your music, your memories.</string>
+    <string name="your_collection">Your Collection</string>
+    <string name="collection_liked_subtitle">Your favourites</string>
+    <string name="collection_downloads_subtitle">Available offline</string>
+    <string name="collection_cached_subtitle">Saved audio cache</string>
+    <string name="collection_top_subtitle">Most played tracks</string>
+    <string name="collection_uploaded_title">Uploaded</string>
+    <string name="collection_uploaded_subtitle">Your personal uploads</string>
+    <string name="music_spaces">My Music Spaces</string>
+    <string name="create_music_space">Create Music Space</string>
+    <string name="music_space_empty_title">Make your own space</string>
+    <string name="music_space_empty">Group playlists into spaces like Night Drive, Study Zone, Workout Energy or Chill and Relax.</string>
+    <string name="smart_collections">Smart Collections</string>
+    <string name="smart_on_repeat_title">On Repeat</string>
+    <string name="smart_on_repeat_desc">Songs you listen to most.</string>
+    <string name="smart_most_played_title">Most Played</string>
+    <string name="smart_most_played_desc">Your top tracks.</string>
+    <string name="smart_album_collection_title">Album Collection</string>
+    <string name="smart_album_collection_desc">Your albums in one place.</string>
+    <string name="smart_long_listening_title">Long Listening</string>
+    <string name="smart_long_listening_desc">Your long playlists.</string>
+    <string name="offline_vault">Offline Vault</string>
+    <string name="offline_vault_desc">Manage your offline music.</string>
+    <string name="offline_vault_manage">Manage</string>
+    <string name="music_space_song_count">%1$d songs</string>
 </resources>
