@@ -24,16 +24,22 @@ import androidx.compose.foundation.gestures.verticalDrag
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -81,8 +87,11 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import dagger.hilt.android.EntryPointAccessors
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.metrolist.music.LocalDatabase
 import com.metrolist.music.LocalListenTogetherManager
@@ -109,6 +118,8 @@ import com.metrolist.music.constants.ShowIntervalIndicatorKey
 import com.metrolist.music.constants.TranslateLanguageKey
 import com.metrolist.music.constants.TranslateModeKey
 import com.metrolist.music.db.entities.LyricsEntity.Companion.LYRICS_NOT_FOUND
+import com.metrolist.music.di.LyricsHelperEntryPoint
+import com.metrolist.music.lyrics.LyricsFetchState
 import com.metrolist.music.lyrics.LyricsTranslationHelper
 import com.metrolist.music.lyrics.LyricsUtils.findActiveLineIndices
 import com.metrolist.music.lyrics.lyricsTextLooksSynced
@@ -180,7 +191,43 @@ fun ExperimentalLyrics(
     
     val scope = rememberCoroutineScope()
 
+    val lyricsHelper = remember {
+        EntryPointAccessors.fromApplication(
+            context.applicationContext,
+            com.metrolist.music.di.LyricsHelperEntryPoint::class.java,
+        ).lyricsHelper()
+    }
+    val fetchState by lyricsHelper.fetchState.collectAsStateWithLifecycle()
+
     val mediaMetadata by playerConnection.mediaMetadata.collectAsStateWithLifecycle()
+
+    val refreshLyrics: () -> Unit = {
+        val metadata = mediaMetadata
+        if (metadata != null) {
+            scope.launch {
+                val result =
+                    lyricsHelper.getLyrics(
+                        mediaId = metadata.id,
+                        title = metadata.title,
+                        artist = metadata.artists.joinToString { it.name },
+                        duration = metadata.duration,
+                        album = metadata.album?.title,
+                        forceRefresh = true,
+                    )
+                if (result.lyrics != LYRICS_NOT_FOUND) {
+                    database.query {
+                        upsert(
+                            com.metrolist.music.db.entities.LyricsEntity(
+                                id = metadata.id,
+                                lyrics = result.lyrics,
+                                provider = result.provider,
+                            ),
+                        )
+                    }
+                }
+            }
+        }
+    }
     val translationStatus by LyricsTranslationHelper.status.collectAsStateWithLifecycle()
     val currentLyricsEntity by playerConnection.currentLyrics.collectAsStateWithLifecycle(initialValue = null)
     var lastValidLyricsEntity by remember { mutableStateOf<com.metrolist.music.db.entities.LyricsEntity?>(null) }
@@ -642,17 +689,70 @@ fun ExperimentalLyrics(
             modifier = Modifier.zIndex(1f).padding(top = 56.dp)
         )
 
-        if (lyrics == LYRICS_NOT_FOUND) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(text = stringResource(R.string.lyrics_not_found), fontSize = 20.sp, color = MaterialTheme.colorScheme.secondary, modifier = Modifier.alpha(0.5f))
+        if (lyrics != null && lyrics != LYRICS_NOT_FOUND && translationStatus is LyricsTranslationHelper.TranslationStatus.Idle) {
+            // Availability status indicator for the resolved lyrics (synced / plain / offline saved).
+            val statusText =
+                when (val state = fetchState) {
+                    is LyricsFetchState.Synced -> stringResource(R.string.lyrics_status_synced)
+                    is LyricsFetchState.Plain -> stringResource(R.string.lyrics_status_plain)
+                    is LyricsFetchState.OfflineAvailable -> stringResource(R.string.lyrics_offline_available)
+                    is LyricsFetchState.CachingRestricted -> stringResource(R.string.lyrics_caching_restricted)
+                    else -> null
+                }
+            if (statusText != null) {
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(top = 56.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = statusText,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.secondary,
+                    )
+                }
             }
-        } else if (lyrics == null && (translationStatus is LyricsTranslationHelper.TranslationStatus.Idle || translationStatus is LyricsTranslationHelper.TranslationStatus.Error)) {
+        }
+
+        if (lyrics == LYRICS_NOT_FOUND || (lyrics == null && (fetchState is LyricsFetchState.Error || fetchState is LyricsFetchState.NotFound || fetchState is LyricsFetchState.OfflineWithoutSaved))) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(
+                    modifier = Modifier.padding(top = 100.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.music_note),
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.size(48.dp),
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = when (val state = fetchState) {
+                            is LyricsFetchState.NotFound -> stringResource(R.string.lyrics_unavailable)
+                            is LyricsFetchState.Error -> stringResource(R.string.lyrics_network_error)
+                            is LyricsFetchState.OfflineWithoutSaved -> stringResource(R.string.lyrics_offline_unavailable)
+                            else -> stringResource(R.string.lyrics_not_found)
+                        },
+                        fontSize = 20.sp,
+                        color = MaterialTheme.colorScheme.secondary,
+                        textAlign = TextAlign.Center,
+                    )
+                    if (fetchState is LyricsFetchState.Error || fetchState is LyricsFetchState.NotFound) {
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Button(onClick = { refreshLyrics() }) {
+                            Text(text = stringResource(R.string.retry))
+                        }
+                    }
+                }
+            }
+        } else if (lyrics == null && (fetchState is LyricsFetchState.Loading || fetchState is LyricsFetchState.Idle)) {
              Column(modifier = Modifier.padding(top = 100.dp)) {
                  ShimmerHost { repeat(10) { Box(contentAlignment = when (lyricsTextPosition) {
                      LyricsPosition.LEFT -> Alignment.CenterStart; LyricsPosition.CENTER -> Alignment.Center; else -> Alignment.CenterEnd
                  }, modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 4.dp)) { TextPlaceholder() } } }
              }
-        } else {
+        } else if (lyrics != null) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()

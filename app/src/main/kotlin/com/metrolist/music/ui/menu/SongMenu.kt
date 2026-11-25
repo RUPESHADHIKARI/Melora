@@ -320,6 +320,7 @@ fun SongMenu(
                                 .onSuccess {
                                     database.query {
                                         delete(song.song)
+                                        deleteLyricsById(song.song.id)
                                     }
                                     withContext(Dispatchers.Main) {
                                         Toast

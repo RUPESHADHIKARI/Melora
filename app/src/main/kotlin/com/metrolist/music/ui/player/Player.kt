@@ -2115,8 +2115,10 @@ fun InlineLyricsView(
                         )
                     val lyricsHelper = entryPoint.lyricsHelper()
                     val fetchedLyricsWithProvider = lyricsHelper.getLyrics(mediaMetadata)
-                    database.query {
-                        upsert(LyricsEntity(mediaMetadata.id, fetchedLyricsWithProvider.lyrics, fetchedLyricsWithProvider.provider))
+                    if (fetchedLyricsWithProvider.lyrics != LyricsEntity.LYRICS_NOT_FOUND && fetchedLyricsWithProvider.canSaveOffline) {
+                        database.query {
+                            upsert(LyricsEntity(mediaMetadata.id, fetchedLyricsWithProvider.lyrics, fetchedLyricsWithProvider.provider))
+                        }
                     }
                 } catch (e: Exception) {
                     // Handle error
@@ -2147,7 +2149,7 @@ fun InlineLyricsView(
         withContext(Dispatchers.IO) {
             try {
                 val existing = database.lyrics(nextId).first()
-                if (existing != null) return@withContext
+                if (existing != null && existing.lyrics != LyricsEntity.LYRICS_NOT_FOUND) return@withContext
                 val entryPoint =
                     EntryPointAccessors.fromApplication(
                         context.applicationContext,
@@ -2155,8 +2157,10 @@ fun InlineLyricsView(
                     )
                 val lyricsHelper = entryPoint.lyricsHelper()
                 val fetched = lyricsHelper.getLyrics(nextMetadata)
-                database.query {
-                    upsert(LyricsEntity(nextId, fetched.lyrics, fetched.provider))
+                if (fetched.lyrics != LyricsEntity.LYRICS_NOT_FOUND && fetched.canSaveOffline) {
+                    database.query {
+                        upsert(LyricsEntity(nextId, fetched.lyrics, fetched.provider))
+                    }
                 }
             } catch (_: Exception) {
             }

@@ -31,10 +31,13 @@ import com.metrolist.music.constants.AudioQualityKey
 import com.metrolist.music.db.MusicDatabase
 import com.metrolist.music.db.entities.AlbumEntity
 import com.metrolist.music.db.entities.FormatEntity
+import com.metrolist.music.db.entities.LyricsEntity
+import com.metrolist.music.db.entities.LyricsEntity.Companion.LYRICS_NOT_FOUND
 import com.metrolist.music.db.entities.Song
 import com.metrolist.music.db.entities.SongEntity
 import com.metrolist.music.di.DownloadCache
 import com.metrolist.music.di.PlayerCache
+import com.metrolist.music.lyrics.LyricsHelper
 import com.metrolist.music.models.MediaMetadata
 import com.metrolist.music.models.toMediaMetadata
 import com.metrolist.music.utils.InnerTubeXPlayer
@@ -71,6 +74,7 @@ constructor(
     val databaseProvider: DatabaseProvider,
     @DownloadCache val downloadCache: Cache,
     @PlayerCache val playerCache: Cache,
+    private val lyricsHelper: LyricsHelper,
 ) {
     private val TAG = "DownloadUtil"
     private val connectivityManager = context.getSystemService<ConnectivityManager>()!!
@@ -265,6 +269,24 @@ constructor(
                                 Download.STATE_COMPLETED -> {
                                     removeFromPlayerCache(download.request.id)
                                     database.updateDownloadedInfo(download.request.id, true, LocalDateTime.now())
+                                    // Best-effort offline lyrics caching for newly downloaded songs; never
+                                    // interrupts or fails the audio download itself.
+                                    scope.launch {
+                                        try {
+                                            val song = database.getSongByIdBlocking(download.request.id)
+                                            if (song != null) {
+                                                val metadata = song.toMediaMetadata()
+                                                val lyricsWithProvider = lyricsHelper.getLyrics(metadata)
+                                                if (lyricsWithProvider.lyrics != LYRICS_NOT_FOUND && lyricsWithProvider.canSaveOffline) {
+                                                    database.query {
+                                                        upsert(LyricsEntity(metadata.id, lyricsWithProvider.lyrics, lyricsWithProvider.provider))
+                                                    }
+                                                }
+                                            }
+                                        } catch (e: Exception) {
+                                            Timber.tag(TAG).w("Failed to fetch lyrics for ${download.request.id}: ${e.message}")
+                                        }
+                                    }
                                 }
                                 Download.STATE_FAILED,
                                 Download.STATE_STOPPED,

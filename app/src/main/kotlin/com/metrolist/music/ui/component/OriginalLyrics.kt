@@ -114,6 +114,7 @@ import coil3.ImageLoader
 import coil3.request.ImageRequest
 import coil3.request.allowHardware
 import coil3.toBitmap
+import dagger.hilt.android.EntryPointAccessors
 import com.metrolist.music.LocalDatabase
 import com.metrolist.music.LocalListenTogetherManager
 import com.metrolist.music.LocalPlayerConnection
@@ -142,7 +143,9 @@ import com.metrolist.music.constants.PlayerBackgroundStyleKey
 import com.metrolist.music.constants.TranslateLanguageKey
 import com.metrolist.music.constants.TranslateModeKey
 import com.metrolist.music.db.entities.LyricsEntity.Companion.LYRICS_NOT_FOUND
+import com.metrolist.music.di.LyricsHelperEntryPoint
 import com.metrolist.music.lyrics.LyricsEntry
+import com.metrolist.music.lyrics.LyricsFetchState
 import com.metrolist.music.lyrics.LyricsTranslationHelper
 import com.metrolist.music.lyrics.LyricsUtils.findCurrentLineIndex
 import com.metrolist.music.lyrics.LyricsUtils.isBelarusian
@@ -229,10 +232,46 @@ fun OriginalLyrics(
 
     val scope = rememberCoroutineScope()
 
+    val lyricsHelper = remember {
+        EntryPointAccessors.fromApplication(
+            context.applicationContext,
+            com.metrolist.music.di.LyricsHelperEntryPoint::class.java,
+        ).lyricsHelper()
+    }
+    val fetchState by lyricsHelper.fetchState.collectAsStateWithLifecycle()
+
     val mediaMetadata by playerConnection.mediaMetadata.collectAsStateWithLifecycle()
     val lyricsEntity by playerConnection.currentLyrics.collectAsStateWithLifecycle(initialValue = null)
     val currentSong by playerConnection.currentSong.collectAsStateWithLifecycle(initialValue = null)
     val lyrics = remember(lyricsEntity) { lyricsEntity?.lyrics?.trim() }
+
+    val refreshLyrics: () -> Unit = {
+        val metadata = mediaMetadata
+        if (metadata != null) {
+            scope.launch {
+                val result =
+                    lyricsHelper.getLyrics(
+                        mediaId = metadata.id,
+                        title = metadata.title,
+                        artist = metadata.artists.joinToString { it.name },
+                        duration = metadata.duration,
+                        album = metadata.album?.title,
+                        forceRefresh = true,
+                    )
+                if (result.lyrics != LYRICS_NOT_FOUND) {
+                    database.query {
+                        upsert(
+                            com.metrolist.music.db.entities.LyricsEntity(
+                                id = metadata.id,
+                                lyrics = result.lyrics,
+                                provider = result.provider,
+                            ),
+                        )
+                    }
+                }
+            }
+        }
+    }
 
     val playerBackground by rememberEnumPreference(
         key = PlayerBackgroundStyleKey,
@@ -780,19 +819,67 @@ fun OriginalLyrics(
             }
         }
 
-        if (lyrics == LYRICS_NOT_FOUND) {
+        if (lyrics != null && lyrics != LYRICS_NOT_FOUND && translationStatus is LyricsTranslationHelper.TranslationStatus.Idle) {
+            // Availability status indicator for the resolved lyrics (synced / plain / offline saved).
+            val statusText =
+                when (val state = fetchState) {
+                    is LyricsFetchState.Synced -> stringResource(R.string.lyrics_status_synced)
+                    is LyricsFetchState.Plain -> stringResource(R.string.lyrics_status_plain)
+                    is LyricsFetchState.OfflineAvailable -> stringResource(R.string.lyrics_offline_available)
+                    is LyricsFetchState.CachingRestricted -> stringResource(R.string.lyrics_caching_restricted)
+                    else -> null
+                }
+            if (statusText != null) {
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(top = 56.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = statusText,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.secondary,
+                    )
+                }
+            }
+        }
+
+        if (lyrics == LYRICS_NOT_FOUND || (lyrics == null && (fetchState is LyricsFetchState.Error || fetchState is LyricsFetchState.NotFound || fetchState is LyricsFetchState.OfflineWithoutSaved))) {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(
-                    text = stringResource(R.string.lyrics_not_found),
-                    fontSize = 20.sp,
-                    color = MaterialTheme.colorScheme.secondary,
-                    textAlign = TextAlign.Center,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.alpha(0.5f),
-                )
+                Column(
+                    modifier = Modifier.padding(top = 100.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.music_note),
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.size(48.dp),
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = when (val state = fetchState) {
+                            is LyricsFetchState.NotFound -> stringResource(R.string.lyrics_unavailable)
+                            is LyricsFetchState.Error -> stringResource(R.string.lyrics_network_error)
+                            is LyricsFetchState.OfflineWithoutSaved -> stringResource(R.string.lyrics_offline_unavailable)
+                            else -> stringResource(R.string.lyrics_not_found)
+                        },
+                        fontSize = 20.sp,
+                        color = MaterialTheme.colorScheme.secondary,
+                        textAlign = TextAlign.Center,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.alpha(0.5f),
+                    )
+                    if (fetchState is LyricsFetchState.Error || fetchState is LyricsFetchState.NotFound) {
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Button(onClick = { refreshLyrics() }) {
+                            Text(text = stringResource(R.string.retry))
+                        }
+                    }
+                }
             }
         } else {
             LazyColumn(

@@ -10,6 +10,13 @@ import android.content.Context
 interface LyricsProvider {
     val name: String
 
+    /**
+     * Whether the provider permits its lyrics to be persisted locally for offline use.
+     * Providers that do not allow offline saving must not be cached; the app should surface
+     * a "caching restricted" state instead of silently storing their results.
+     */
+    val supportsOfflineCaching: Boolean get() = true
+
     fun isEnabled(context: Context): Boolean
 
     suspend fun getLyrics(

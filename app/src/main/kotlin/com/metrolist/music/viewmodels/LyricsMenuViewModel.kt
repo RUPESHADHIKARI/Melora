@@ -9,6 +9,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.metrolist.music.db.MusicDatabase
 import com.metrolist.music.db.entities.LyricsEntity
+import com.metrolist.music.db.entities.LyricsEntity.Companion.LYRICS_NOT_FOUND
 import com.metrolist.music.lyrics.LyricsHelper
 import com.metrolist.music.lyrics.LyricsResult
 import com.metrolist.music.models.MediaMetadata
@@ -87,9 +88,20 @@ constructor(
             lyricsEntity?.let(::delete)
             val lyricsWithProvider =
                 runBlocking {
-                    lyricsHelper.getLyrics(mediaMetadata)
+                    lyricsHelper.getLyrics(
+                        mediaId = mediaMetadata.id,
+                        title = mediaMetadata.title,
+                        artist = mediaMetadata.artists.joinToString { it.name },
+                        duration = mediaMetadata.duration,
+                        album = mediaMetadata.album?.title,
+                        forceRefresh = true,
+                    )
                 }
-            upsert(LyricsEntity(mediaMetadata.id, lyricsWithProvider.lyrics, lyricsWithProvider.provider))
+            // Only persist usable lyrics; transient "not found" results stay negative-cached.
+            // Providers that don't permit offline saving never persist their lyrics.
+            if (lyricsWithProvider.lyrics != LYRICS_NOT_FOUND && lyricsWithProvider.canSaveOffline) {
+                upsert(LyricsEntity(mediaMetadata.id, lyricsWithProvider.lyrics, lyricsWithProvider.provider))
+            }
         }
     }
 }

@@ -35,6 +35,21 @@ object LyricsUtils {
         return title.replace(Regex("\\s*[(\\[].*?[)\\]]"), "").trim()
     }
 
+    /**
+     * A fetch is only worth caching/displaying when the payload contains real lyric text.
+     * Timestamp-only or marker-only payloads are treated as invalid so the provider
+     * fallback can try the next source instead of caching garbage.
+     */
+    fun isMeaningfulLyrics(lyrics: String): Boolean {
+        val contentLines =
+            lyrics.lineSequence()
+                .map { it.trim() }
+                .filter { line ->
+                    line.isNotBlank() && !line.startsWith("[") && !line.startsWith("<") && !line.startsWith("{")
+                }
+        return contentLines.any { line -> line.any { char -> char.isLetter() } }
+    }
+
     fun filterLyricsCreditLines(lyrics: String): String {
         return lyrics.lines().filter { line ->
             // Strip leading bracketed/braced content, version tags, and timestamps

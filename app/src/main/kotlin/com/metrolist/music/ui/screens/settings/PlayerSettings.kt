@@ -42,6 +42,7 @@ import com.metrolist.music.constants.AudioTrackPlaybackParamsKey
 import com.metrolist.music.constants.AudioQuality
 import com.metrolist.music.constants.AudioQualityKey
 import com.metrolist.music.constants.AutoDownloadOnLikeKey
+import com.metrolist.music.constants.AutoDownloadLyricsKey
 import com.metrolist.music.constants.CrossfadeDurationKey
 import com.metrolist.music.constants.CrossfadeEnabledKey
 import com.metrolist.music.constants.CrossfadeGaplessKey
@@ -172,6 +173,10 @@ fun PlayerSettings(
     )
     val (autoDownloadOnLike, onAutoDownloadOnLikeChange) = rememberPreference(
         AutoDownloadOnLikeKey,
+        defaultValue = true
+    )
+    val (autoDownloadLyrics, onAutoDownloadLyricsChange) = rememberPreference(
+        AutoDownloadLyricsKey,
         defaultValue = true
     )
     val (similarContentEnabled, similarContentEnabledChange) = rememberPreference(
@@ -871,6 +876,27 @@ fun PlayerSettings(
                         )
                     },
                     onClick = { onAutoDownloadOnLikeChange(!autoDownloadOnLike) }
+                ),
+                Material3SettingsItem(
+                    icon = painterResource(R.drawable.lyrics),
+                    title = { Text(stringResource(R.string.auto_download_lyrics)) },
+                    description = { Text(stringResource(R.string.auto_download_lyrics_desc)) },
+                    trailingContent = {
+                        Switch(
+                            checked = autoDownloadLyrics,
+                            onCheckedChange = onAutoDownloadLyricsChange,
+                            thumbContent = {
+                                Icon(
+                                    painter = painterResource(
+                                        id = if (autoDownloadLyrics) R.drawable.check else R.drawable.close
+                                    ),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(SwitchDefaults.IconSize)
+                                )
+                            }
+                        )
+                    },
+                    onClick = { onAutoDownloadLyricsChange(!autoDownloadLyrics) }
                 ),
                 Material3SettingsItem(
                     icon = painterResource(R.drawable.similar),

@@ -1969,6 +1969,9 @@ interface DatabaseDao {
     @Upsert
     fun upsert(lyrics: LyricsEntity)
 
+    @Query("DELETE FROM lyrics WHERE id = :id")
+    fun deleteLyricsById(id: String)
+
     @Upsert
     fun upsert(format: FormatEntity)
 

@@ -238,6 +238,7 @@ fun SelectionSongMenu(
                                         YouTube.deleteUploadedSong(entityId).onSuccess {
                                             database.query {
                                                 delete(song.song)
+                                                deleteLyricsById(song.song.id)
                                             }
                                             successCount++
                                         }

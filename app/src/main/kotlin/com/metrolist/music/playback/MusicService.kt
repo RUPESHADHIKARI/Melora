@@ -109,6 +109,7 @@ import com.metrolist.music.constants.AudioOffload
 import com.metrolist.music.constants.AudioQualityKey
 import com.metrolist.music.constants.AudioTrackPlaybackParamsKey
 import com.metrolist.music.constants.AutoDownloadOnLikeKey
+import com.metrolist.music.constants.AutoDownloadLyricsKey
 import com.metrolist.music.constants.AutoLoadMoreKey
 import com.metrolist.music.constants.AutoSkipNextOnErrorKey
 import com.metrolist.music.constants.AutoplayKey
@@ -170,6 +171,7 @@ import com.metrolist.music.db.MusicDatabase
 import com.metrolist.music.db.entities.Event
 import com.metrolist.music.db.entities.FormatEntity
 import com.metrolist.music.db.entities.LyricsEntity
+import com.metrolist.music.db.entities.LyricsEntity.Companion.LYRICS_NOT_FOUND
 import com.metrolist.music.db.entities.PlaylistEntity
 import com.metrolist.music.db.entities.RelatedSongMap
 import com.metrolist.music.db.entities.Song
@@ -886,14 +888,19 @@ class MusicService :
                     .first() == null
             ) {
                 val lyricsWithProvider = lyricsHelper.getLyrics(mediaMetadata)
-                database.query {
-                    upsert(
-                        LyricsEntity(
-                            id = mediaMetadata.id,
-                            lyrics = lyricsWithProvider.lyrics,
-                            provider = lyricsWithProvider.provider,
-                        ),
-                    )
+                // Only persist usable lyrics; transient "not found" results stay negative-cached
+                // instead of being treated as a saved offline copy.
+                // Providers that don't permit offline saving never persist their lyrics.
+                if (lyricsWithProvider.lyrics != LYRICS_NOT_FOUND && lyricsWithProvider.canSaveOffline) {
+                    database.query {
+                        upsert(
+                            LyricsEntity(
+                                id = mediaMetadata.id,
+                                lyrics = lyricsWithProvider.lyrics,
+                                provider = lyricsWithProvider.provider,
+                            ),
+                        )
+                    }
                 }
             }
         }
@@ -2260,6 +2267,29 @@ class MusicService :
 
                     if (dataStore.get(AutoDownloadOnLikeKey, true) && song.liked) {
                         downloadUtil.download(song.id)
+                    }
+
+                    if (dataStore.get(AutoDownloadLyricsKey, true) && song.liked) {
+                        // Best-effort offline lyrics caching for liked songs; never blocks or fails the audio download.
+                        scope.launch {
+                            try {
+                                val metadata = librarySong.toMediaMetadata()
+                                val lyricsWithProvider = lyricsHelper.getLyrics(metadata)
+                                if (lyricsWithProvider.lyrics != LYRICS_NOT_FOUND && lyricsWithProvider.canSaveOffline) {
+                                    database.query {
+                                        upsert(
+                                            LyricsEntity(
+                                                id = metadata.id,
+                                                lyrics = lyricsWithProvider.lyrics,
+                                                provider = lyricsWithProvider.provider,
+                                            ),
+                                        )
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                Timber.tag(TAG).w("Failed to fetch lyrics for ${song.id}: ${e.message}")
+                            }
+                        }
                     }
                 }
                 currentMediaMetadata.value = player.currentMetadata
